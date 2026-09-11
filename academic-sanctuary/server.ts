@@ -23,693 +23,15 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-// Initial Mock Database
-let classrooms = [
-  {
-    id: 'cls-1',
-    code: 'BTECH26A',
-    name: 'B.Tech CSE 2026 - Section A',
-    collegeName: 'Oxford University',
-    location: 'Oxford, United Kingdom',
-    department: 'Department of Computer Science & Engineering',
-    course: 'B.Tech Computer Science & Engineering',
-    degreeLevel: 'undergraduate',
-    batchYear: '2026',
-    section: 'Section A',
-    semester: 'Semester 5',
-    superAdminId: 'user-sarah',
-    memberCount: 64,
-    createdAt: '2024-08-15',
-  },
-  {
-    id: 'cls-2',
-    code: 'AIDS26A',
-    name: 'B.Tech AI & Data Science 2026',
-    collegeName: 'Stanford University',
-    location: 'Stanford, California, USA',
-    department: 'School of Engineering & AI',
-    course: 'B.Tech Artificial Intelligence',
-    degreeLevel: 'undergraduate',
-    batchYear: '2026',
-    section: 'Section A',
-    semester: 'Semester 5',
-    superAdminId: 'user-alex',
-    memberCount: 42,
-    createdAt: '2024-08-20',
-  },
-];
-
-let registeredUsers = [
-  {
-    id: 'user-sarah',
-    name: 'Sarah Jenkins',
-    email: 'sarah.j@oxford.edu',
-    password: 'password123',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-    role: 'super_admin',
-    department: 'Computer Science',
-    rollNumber: 'CS22B042',
-    classroomId: 'cls-1',
-  },
-  {
-    id: 'user-elena',
-    name: 'Elena Rostova',
-    email: 'elena.r@oxford.edu',
-    password: 'password123',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    role: 'student',
-    department: 'Computer Science',
-    rollNumber: 'CS22B029',
-    classroomId: 'cls-1',
-  },
-  {
-    id: 'user-michael',
-    name: 'Michael Klein',
-    email: 'michael.k@oxford.edu',
-    password: 'password123',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-    role: 'admin',
-    department: 'Computer Science',
-    rollNumber: 'CS22B018',
-    classroomId: 'cls-1',
-  },
-  {
-    id: 'user-david',
-    name: 'David Chen',
-    email: 'david.c@oxford.edu',
-    password: 'password123',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZtyqQ3lycnq7AMccaFmVziEt3AOMSS90B5pj4-UFEp42WGtql_hBxHwcbB4K-JONAFXKO9-abTCyW9oAG_JgeGVlyq9sx6f93oFLYzHV7HCo51NPdlO26vXmieOXaRjm9rM5PtUHLrI_sqCf2yGFoWopo6LDOqBuZahjQVNFzuGvnqdcddWtdhK7MMA_LBxaxaSFpgc6om_JSFb5BVA_HqzGkhPpFmFemKVwo8Cish1-yDuQlW5yWDQ',
-    role: 'student',
-    department: 'Computer Science',
-    rollNumber: 'CS22B011',
-    classroomId: 'cls-1',
-  },
-  {
-    id: 'user-alex',
-    name: 'Alex Turner',
-    email: 'alex.t@stanford.edu',
-    password: 'password123',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAOr9ihyIm8fSL2h8ABIdrhEVsTaSSF1MtWlN3-YQRsFcatsotXnT-Tfz31RRQSgyBaGTFnMG3ZGt8-p2sw8GjnpuUO7yGjxsa11thhS0YCg3XmDsccUBx_Pswu3idSrwAlTd8vKzteip1VJeTr8GdDPfUHN7HqksrK4F0q2hknVgq0tJPtorwnixkwU2OyTcR6qrX4XGogOpYu7-tfu6gvAe9Qxu6fGwcudfTfRMW-g0WyhVbb7_v17A',
-    role: 'super_admin',
-    department: 'School of Engineering & AI',
-    rollNumber: 'AI24B001',
-    classroomId: 'cls-2',
-  },
-];
-
-let currentUser = registeredUsers[0];
-
-let subjects = [
-  {
-    id: 'sub-ds',
-    classroomId: 'cls-1',
-    code: 'CS301',
-    name: 'Data Structures',
-    professor: 'Prof. Alan Turing',
-    description: 'Fundamental concepts of data organization, algorithms, and complexity analysis essential for efficient software development.',
-    creditHours: 4,
-    materialsCount: 14,
-    notesCount: 8,
-    pyqsCount: 5,
-  },
-  {
-    id: 'sub-os',
-    classroomId: 'cls-1',
-    code: 'CS302',
-    name: 'Operating Systems',
-    professor: 'Prof. A. Kumar',
-    description: 'Concurrency, process management, memory virtualisation, file systems and distributed operating system architectures.',
-    creditHours: 4,
-    materialsCount: 18,
-    notesCount: 11,
-    pyqsCount: 6,
-  },
-  {
-    id: 'sub-algo',
-    classroomId: 'cls-1',
-    code: 'CS303',
-    name: 'Algorithm Analysis',
-    professor: 'Dr. S. Gupta',
-    description: 'Asymptotic notation, dynamic programming, divide-and-conquer, greedy heuristics, NP-completeness and graph algorithms.',
-    creditHours: 4,
-    materialsCount: 12,
-    notesCount: 7,
-    pyqsCount: 4,
-  },
-  {
-    id: 'sub-cn',
-    classroomId: 'cls-1',
-    code: 'CS304',
-    name: 'Computer Networks',
-    professor: 'Dr. N. Singh',
-    description: 'OSI & TCP/IP stack layers, routing protocols, flow and congestion control, socket programming and network security.',
-    creditHours: 3,
-    materialsCount: 16,
-    notesCount: 9,
-    pyqsCount: 5,
-  },
-  {
-    id: 'sub-dbms',
-    classroomId: 'cls-1',
-    code: 'CS305',
-    name: 'Database Management Systems',
-    professor: 'Dr. E. Codd',
-    description: 'Relational algebra, SQL schema normalization, indexing, ACID transactions and distributed NoSQL systems.',
-    creditHours: 4,
-    materialsCount: 15,
-    notesCount: 10,
-    pyqsCount: 5,
-  },
-  {
-    id: 'sub-toc',
-    classroomId: 'cls-1',
-    code: 'CS306',
-    name: 'Theory of Computation',
-    professor: 'Prof. N. Chomsky',
-    description: 'Automata theory, regular expressions, context-free grammars, Turing machines, decidability and computational complexity.',
-    creditHours: 3,
-    materialsCount: 10,
-    notesCount: 6,
-    pyqsCount: 4,
-  },
-];
-
-let materials = [
-  {
-    id: 'mat-1',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: 'Trees & Graphs Deep Dive',
-    description: 'Comprehensive guide covering Binary Search Trees, AVL Trees, Red-Black Trees, Graph traversals (BFS/DFS), Dijkstra & A* shortest paths.',
-    type: 'notes',
-    fileFormat: 'PDF',
-    fileSize: '2.4 MB',
-    uploadedBy: {
-      id: 'user-sarah',
-      name: 'Sarah J.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAOr9ihyIm8fSL2h8ABIdrhEVsTaSSF1MtWlN3-YQRsFcatsotXnT-Tfz31RRQSgyBaGTFnMG3ZGt8-p2sw8GjnpuUO7yGjxsa11thhS0YCg3XmDsccUBx_Pswu3idSrwAlTd8vKzteip1VJeTr8GdDPfUHN7HqksrK4F0q2hknVgq0tJPtorwnixkwU2OyTcR6qrX4XGogOpYu7-tfu6gvAe9Qxu6fGwcudfTfRMW-g0WyhVbb7_v17A',
-      role: 'super_admin',
-    },
-    uploadedDate: 'Aug 20, 2026',
-    createdAt: 1786500000000,
-    downloadsCount: 142,
-    viewsCount: 389,
-    isVerified: true,
-    tags: ['Trees', 'Graphs', 'BFS/DFS', 'AVL Trees'],
-    unit: 'Unit 3 & 4',
-    recommendedExam: 'SEM',
-    contentSnippet: '# Trees & Graphs Deep Dive\n\n## 1. Binary Search Trees (BST)\nA binary tree where every node in the left subtree has key ≤ node key, and right subtree has key > node key.\n\n### Balanced Trees\n- **AVL Trees**: Strict height balancing where balance factor BF = |h_L - h_R| ≤ 1.\n- **Rotations**: Single left (LL), single right (RR), double left-right (LR), double right-left (RL).\n\n## 2. Graph Algorithms\n- BFS: Uses Queue, O(V + E), shortest path in unweighted graphs.\n- DFS: Uses Stack / Recursion, cycle detection, topological sorting.',
-  },
-  {
-    id: 'mat-2',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: 'Sorting Algorithms Summary',
-    description: 'Time & space complexity cheat sheet for Quicksort, Mergesort, Heapsort, Radix Sort, with stability analysis and edge-case code samples.',
-    type: 'notes',
-    fileFormat: 'PDF',
-    fileSize: '1.8 MB',
-    uploadedBy: {
-      id: 'user-michael',
-      name: 'Michael K.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-      role: 'admin',
-    },
-    uploadedDate: 'Aug 24, 2026',
-    createdAt: 1786800000000,
-    downloadsCount: 98,
-    viewsCount: 245,
-    isVerified: true,
-    tags: ['Sorting', 'Complexity', 'Quicksort', 'Heapsort'],
-    unit: 'Unit 2',
-    recommendedExam: 'IAT 1',
-    contentSnippet: '# Sorting Algorithms Quick Reference\n\n| Algorithm | Best | Average | Worst | Space | Stable? |\n|---|---|---|---|---|---|\n| Merge Sort | O(n log n) | O(n log n) | O(n log n) | O(n) | Yes |\n| Quick Sort | O(n log n) | O(n log n) | O(n²) | O(log n) | No |\n| Heap Sort | O(n log n) | O(n log n) | O(n log n) | O(1) | No |\n| Insertion Sort | O(n) | O(n²) | O(n²) | O(1) | Yes |',
-  },
-  {
-    id: 'mat-3',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: 'Midterm Review Notes',
-    description: 'Consolidated review questions and high-yield theorems for Midterm Exam 1. Includes solved problems from past 3 years.',
-    type: 'notes',
-    fileFormat: 'DOCX',
-    fileSize: '540 KB',
-    uploadedBy: {
-      id: 'user-elena',
-      name: 'Elena R.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-      role: 'student',
-    },
-    uploadedDate: 'Aug 28, 2026',
-    createdAt: 1787100000000,
-    downloadsCount: 167,
-    viewsCount: 412,
-    isVerified: true,
-    tags: ['Midterm', 'Exam Prep', 'Formulas'],
-    unit: 'Unit 1-3',
-    recommendedExam: 'IAT 1',
-    contentSnippet: '# Data Structures Midterm Review\n\n## Important Concepts Checklist:\n1. Array vs Linked List trade-offs in cache locality\n2. Stack applications (Infix to Postfix evaluation, Parentheses matching)\n3. Circular Queue implementation and modular arithmetic\n4. Hashing collision resolution (Chaining vs Open Addressing)',
-  },
-  {
-    id: 'mat-4',
-    subjectId: 'sub-os',
-    subjectCode: 'CS302',
-    subjectName: 'Operating Systems',
-    title: 'Operating Systems Ch 4',
-    description: 'Process Synchronization, Semaphores, Mutex Locks, Monitors, and Classic Synchronization Problems (Dining Philosophers, Readers-Writers).',
-    type: 'materials',
-    fileFormat: 'PDF',
-    fileSize: '3.1 MB',
-    uploadedBy: {
-      id: 'prof-kumar',
-      name: 'Prof. A. Kumar',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-      role: 'super_admin',
-    },
-    uploadedDate: 'Aug 31, 2026',
-    createdAt: 1787400000000,
-    downloadsCount: 215,
-    viewsCount: 520,
-    isVerified: true,
-    tags: ['Synchronization', 'Semaphores', 'Deadlocks'],
-    unit: 'Chapter 4',
-    recommendedExam: 'IAT 2',
-  },
-  {
-    id: 'mat-5',
-    subjectId: 'sub-algo',
-    subjectCode: 'CS303',
-    subjectName: 'Algorithm Analysis',
-    title: 'Algorithm Analysis Notes',
-    description: 'Master Theorem proofs, divide and conquer recurrences, amortized analysis with aggregate and potential method.',
-    type: 'notes',
-    fileFormat: 'DOCX',
-    fileSize: '1.2 MB',
-    uploadedBy: {
-      id: 'user-sgupta',
-      name: 'S. Gupta',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZtyqQ3lycnq7AMccaFmVziEt3AOMSS90B5pj4-UFEp42WGtql_hBxHwcbB4K-JONAFXKO9-abTCyW9oAG_JgeGVlyq9sx6f93oFLYzHV7HCo51NPdlO26vXmieOXaRjm9rM5PtUHLrI_sqCf2yGFoWopo6LDOqBuZahjQVNFzuGvnqdcddWtdhK7MMA_LBxaxaSFpgc6om_JSFb5BVA_HqzGkhPpFmFemKVwo8Cish1-yDuQlW5yWDQ',
-      role: 'admin',
-    },
-    uploadedDate: 'Sep 02, 2026',
-    createdAt: 1787700000000,
-    downloadsCount: 180,
-    viewsCount: 390,
-    isVerified: true,
-    tags: ['Master Theorem', 'Recurrences', 'Amortized'],
-    unit: 'Unit 1 & 2',
-    recommendedExam: 'IAT 2',
-  },
-  {
-    id: 'mat-6',
-    subjectId: 'sub-cn',
-    subjectCode: 'CS304',
-    subjectName: 'Computer Networks',
-    title: 'Computer Networks Lec 2',
-    description: 'Physical & Data Link Layer fundamentals, framing, CRC error detection, Sliding Window Protocols and HDLC.',
-    type: 'slides',
-    fileFormat: 'PPTX',
-    fileSize: '4.5 MB',
-    uploadedBy: {
-      id: 'dr-nsingh',
-      name: 'Dr. N. Singh',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA1PwqHGy5aQHpTAIK7j3134mtI9CM0k1_yKx2kXB2gX7nB5eU69RDFagtrZZbKZrzCGKMTfqZTO4wl9r5YtwAj-a8Jt1TqT2OGJ7I1zYliDnaHM6G8UP4avi81EH57FxqmIogm5-bDjwBnPaYPafDUDVQ3SqBmGx5snvc9LKmmuUPDrjKJMXULeOdhgVONPGPze1AUVelqNOGoYQTs9sUsga2VZLRuhWuwkQ8GC0078UcNoMwCyrhaVw',
-      role: 'admin',
-    },
-    uploadedDate: 'Sep 04, 2026',
-    createdAt: 1788000000000,
-    downloadsCount: 132,
-    viewsCount: 290,
-    isVerified: true,
-    tags: ['OSI Model', 'Data Link', 'CRC', 'Sliding Window'],
-    unit: 'Lecture 2',
-    recommendedExam: 'IAT 1',
-  },
-  {
-    id: 'mat-slides-ds',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: 'Linear & Tree Structures Presentation Slides',
-    description: 'Official lecture slide deck covering Stacks, Queues, Binary Trees, AVL Trees, and Traversal Animations.',
-    type: 'slides',
-    fileFormat: 'PPTX',
-    fileSize: '5.8 MB',
-    uploadedBy: {
-      id: 'user-sarah',
-      name: 'Sarah J.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-      role: 'super_admin',
-    },
-    uploadedDate: 'Aug 29, 2026',
-    createdAt: 1787200000000,
-    downloadsCount: 175,
-    viewsCount: 450,
-    isVerified: true,
-    tags: ['Slides', 'AVL Trees', 'Queues', 'Lecture Deck'],
-    unit: 'Unit 2 & 3',
-    recommendedExam: 'IAT 1',
-    contentSnippet: '# Data Structures Lecture Slides\n\n## Slide Outline:\n- Slide 1: Introduction to Self-Balancing Trees\n- Slide 2: Single and Double Rotations (LL, RR, LR, RL)\n- Slide 3: Complexity Comparison: BST vs AVL vs Red-Black\n- Slide 4: Real-world Applications in Database Indexing',
-  },
-  {
-    id: 'mat-7',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: '2023 Fall Midterm PYQ with Solutions',
-    description: 'Official Previous Year Question paper from Fall 2023 with step-by-step verified solutions and grading rubrics.',
-    type: 'pyqs',
-    fileFormat: 'PDF',
-    fileSize: '3.4 MB',
-    uploadedBy: {
-      id: 'user-sarah',
-      name: 'Sarah J.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-      role: 'super_admin',
-    },
-    uploadedDate: 'Sep 05, 2026',
-    createdAt: 1788300000000,
-    downloadsCount: 310,
-    viewsCount: 650,
-    isVerified: true,
-    tags: ['PYQ', '2023', 'Solved Paper'],
-    unit: 'Past Exam',
-    recommendedExam: 'IAT 1',
-  },
-  {
-    id: 'mat-8',
-    subjectId: 'sub-ds',
-    subjectCode: 'CS301',
-    subjectName: 'Data Structures',
-    title: 'Top 50 University Exam Questions (High Yield)',
-    description: 'Curated list of repeated 5-mark and 10-mark questions across 5 academic years with model diagrams and code snippets.',
-    type: 'important_questions',
-    fileFormat: 'PDF',
-    fileSize: '2.1 MB',
-    uploadedBy: {
-      id: 'user-michael',
-      name: 'Michael K.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-      role: 'admin',
-    },
-    uploadedDate: 'Sep 06, 2026',
-    createdAt: 1788600000000,
-    downloadsCount: 420,
-    viewsCount: 880,
-    isVerified: true,
-    tags: ['Important Questions', 'Finals', 'Must-Do'],
-    unit: 'All Units',
-    recommendedExam: 'SEM',
-  },
-  {
-    id: 'mat-toc-1',
-    subjectId: 'sub-toc',
-    subjectCode: 'CS306',
-    subjectName: 'Theory of Computation',
-    title: 'DFA, NFA & Regular Expressions Formula Guide',
-    description: 'Complete state transition diagrams, Pumping Lemma proofs, and Chomsky Normal Form reduction steps.',
-    type: 'notes',
-    fileFormat: 'PDF',
-    fileSize: '2.6 MB',
-    uploadedBy: {
-      id: 'user-elena',
-      name: 'Elena R.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-      role: 'student',
-    },
-    uploadedDate: 'Sep 03, 2026',
-    createdAt: 1787900000000,
-    downloadsCount: 195,
-    viewsCount: 420,
-    isVerified: true,
-    tags: ['DFA', 'NFA', 'Pumping Lemma', 'TOC'],
-    unit: 'Unit 1 & 2',
-    recommendedExam: 'IAT 1',
-    contentSnippet: '# Theory of Computation Quick Reference\n\n## Finite Automata:\n- DFA: (Q, Σ, δ, q0, F) where δ: Q × Σ → Q\n- NFA: δ: Q × (Σ ∪ {ε}) → 2^Q\n- Subset Construction: Convert any NFA with n states to equivalent DFA with at most 2^n states.',
-  },
-  {
-    id: 'mat-dbms-1',
-    subjectId: 'sub-dbms',
-    subjectCode: 'CS305',
-    subjectName: 'Database Management Systems',
-    title: 'SQL, Normalization & ACID Transactions Sheet',
-    description: 'BCNF vs 3NF decomposition algorithms, serializability testing with precedence graphs, and 2-phase locking protocol.',
-    type: 'notes',
-    fileFormat: 'PDF',
-    fileSize: '3.0 MB',
-    uploadedBy: {
-      id: 'user-david',
-      name: 'David C.',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZtyqQ3lycnq7AMccaFmVziEt3AOMSS90B5pj4-UFEp42WGtql_hBxHwcbB4K-JONAFXKO9-abTCyW9oAG_JgeGVlyq9sx6f93oFLYzHV7HCo51NPdlO26vXmieOXaRjm9rM5PtUHLrI_sqCf2yGFoWopo6LDOqBuZahjQVNFzuGvnqdcddWtdhK7MMA_LBxaxaSFpgc6om_JSFb5BVA_HqzGkhPpFmFemKVwo8Cish1-yDuQlW5yWDQ',
-      role: 'student',
-    },
-    uploadedDate: 'Sep 04, 2026',
-    createdAt: 1788100000000,
-    downloadsCount: 240,
-    viewsCount: 510,
-    isVerified: true,
-    tags: ['BCNF', 'Normalization', 'ACID', 'Transactions'],
-    unit: 'Unit 3 & 4',
-    recommendedExam: 'IAT 2',
-  },
-  {
-    id: 'mat-os-sem',
-    subjectId: 'sub-os',
-    subjectCode: 'CS302',
-    subjectName: 'Operating Systems',
-    title: 'Operating Systems Semester Comprehensive Review',
-    description: 'Full course review for final semester exams: Virtual Memory, Page Replacement (LRU, FIFO), File Allocation, Disk Scheduling (SCAN, C-LOOK).',
-    type: 'important_questions',
-    fileFormat: 'PDF',
-    fileSize: '3.7 MB',
-    uploadedBy: {
-      id: 'prof-kumar',
-      name: 'Prof. A. Kumar',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-      role: 'super_admin',
-    },
-    uploadedDate: 'Sep 05, 2026',
-    createdAt: 1788400000000,
-    downloadsCount: 380,
-    viewsCount: 790,
-    isVerified: true,
-    tags: ['Semester Finals', 'OS', 'Virtual Memory'],
-    unit: 'Comprehensive',
-    recommendedExam: 'SEM',
-  },
-];
-
-let announcements = [
-  {
-    id: 'ann-1',
-    classroomId: 'cls-1',
-    title: 'Internal Exam Schedule Released for Mid-Semesters.',
-    description: 'Mid-semester examinations will commence from the 5th of next month. Please check the Exams tab for the complete timetable and seating arrangements.',
-    timestamp: 'Today, 09:00 AM',
-    author: 'Admin Office',
-    isUrgent: true,
-  },
-  {
-    id: 'ann-2',
-    classroomId: 'cls-1',
-    title: 'Guest Lecture: Advances in Machine Learning by Dr. V. Sharma in Hall 3.',
-    description: 'All 3rd-year CS students are requested to attend. Attendance will be counted towards the lab curriculum.',
-    timestamp: 'Yesterday',
-    author: 'Prof. Alan Turing',
-    isUrgent: false,
-  },
-  {
-    id: 'ann-3',
-    classroomId: 'cls-1',
-    title: 'Data Structures Assignment 3 Deadline Extended to Sunday Midnight.',
-    description: 'Submit your Tree traversal and Graph cycle detection assignments directly via the portal or notes submission tab.',
-    timestamp: '3 days ago',
-    author: 'Sarah Jenkins (Class Rep)',
-    isUrgent: false,
-  },
-];
-
-let exams = [
-  // IAT 1 (Commencing first in September)
-  {
-    id: 'exam-1',
-    classroomId: 'cls-1',
-    subjectName: 'Data Structures',
-    subjectCode: 'CS301',
-    date: '2026-09-08',
-    daysRemaining: 3,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'IAT 1',
-    venue: 'Hall 201',
-    progressPercent: 80,
-    isCompleted: false,
-  },
-  {
-    id: 'exam-2',
-    classroomId: 'cls-1',
-    subjectName: 'Theory of Computation',
-    subjectCode: 'CS306',
-    date: '2026-09-10',
-    daysRemaining: 5,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'IAT 1',
-    venue: 'Hall 201',
-    progressPercent: 70,
-    isCompleted: false,
-  },
-  {
-    id: 'exam-3',
-    classroomId: 'cls-1',
-    subjectName: 'Computer Networks',
-    subjectCode: 'CS304',
-    date: '2026-09-13',
-    daysRemaining: 8,
-    time: '02:00 PM - 05:00 PM',
-    examType: 'IAT 1',
-    venue: 'Hall 204',
-    progressPercent: 65,
-    isCompleted: false,
-  },
-
-  // IAT 2 (Commencing next in October)
-  {
-    id: 'exam-4',
-    classroomId: 'cls-1',
-    subjectName: 'Operating Systems',
-    subjectCode: 'CS302',
-    date: '2026-10-06',
-    daysRemaining: 31,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'IAT 2',
-    venue: 'Hall 202',
-    progressPercent: 45,
-    isCompleted: false,
-  },
-  {
-    id: 'exam-5',
-    classroomId: 'cls-1',
-    subjectName: 'Algorithm Analysis',
-    subjectCode: 'CS303',
-    date: '2026-10-09',
-    daysRemaining: 34,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'IAT 2',
-    venue: 'Hall 202',
-    progressPercent: 40,
-    isCompleted: false,
-  },
-  {
-    id: 'exam-6',
-    classroomId: 'cls-1',
-    subjectName: 'Database Management Systems',
-    subjectCode: 'CS305',
-    date: '2026-10-12',
-    daysRemaining: 37,
-    time: '02:00 PM - 05:00 PM',
-    examType: 'IAT 2',
-    venue: 'Hall 203',
-    progressPercent: 35,
-    isCompleted: false,
-  },
-
-  // Semester Examinations (SEM - Commencing in November)
-  {
-    id: 'exam-7',
-    classroomId: 'cls-1',
-    subjectName: 'Data Structures',
-    subjectCode: 'CS301',
-    date: '2026-11-16',
-    daysRemaining: 72,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'SEM',
-    venue: 'Main Auditorium',
-    progressPercent: 25,
-    isCompleted: false,
-  },
-  {
-    id: 'exam-8',
-    classroomId: 'cls-1',
-    subjectName: 'Operating Systems',
-    subjectCode: 'CS302',
-    date: '2026-11-19',
-    daysRemaining: 75,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'SEM',
-    venue: 'Main Auditorium',
-    progressPercent: 20,
-    isCompleted: false,
-  },
-
-  // Completed Exams (Concluded earlier)
-  {
-    id: 'exam-past-1',
-    classroomId: 'cls-1',
-    subjectName: 'Discrete Mathematics',
-    subjectCode: 'MA301',
-    date: '2026-08-20',
-    daysRemaining: -16,
-    time: '10:00 AM - 01:00 PM',
-    examType: 'IAT 1',
-    venue: 'Hall 105',
-    progressPercent: 100,
-    isCompleted: true,
-  },
-  {
-    id: 'exam-past-2',
-    classroomId: 'cls-1',
-    subjectName: 'Digital Electronics & Logic Design',
-    subjectCode: 'EC204',
-    date: '2026-08-24',
-    daysRemaining: -12,
-    time: '02:00 PM - 05:00 PM',
-    examType: 'IAT 1',
-    venue: 'Hall 108',
-    progressPercent: 100,
-    isCompleted: true,
-  },
-];
-
-let members = [
-  {
-    id: 'user-sarah',
-    name: 'Sarah Jenkins',
-    email: 'sarah.j@oxford.edu',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-    role: 'super_admin',
-    rollNumber: 'CS22B042',
-    joinedDate: 'Aug 2024',
-  },
-  {
-    id: 'user-michael',
-    name: 'Michael Klein',
-    email: 'michael.k@oxford.edu',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-    role: 'admin',
-    rollNumber: 'CS22B018',
-    joinedDate: 'Aug 2024',
-  },
-  {
-    id: 'user-elena',
-    name: 'Elena Rostova',
-    email: 'elena.r@oxford.edu',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    role: 'student',
-    rollNumber: 'CS22B029',
-    joinedDate: 'Sep 2024',
-  },
-  {
-    id: 'user-david',
-    name: 'David Chen',
-    email: 'david.c@oxford.edu',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZtyqQ3lycnq7AMccaFmVziEt3AOMSS90B5pj4-UFEp42WGtql_hBxHwcbB4K-JONAFXKO9-abTCyW9oAG_JgeGVlyq9sx6f93oFLYzHV7HCo51NPdlO26vXmieOXaRjm9rM5PtUHLrI_sqCf2yGFoWopo6LDOqBuZahjQVNFzuGvnqdcddWtdhK7MMA_LBxaxaSFpgc6om_JSFb5BVA_HqzGkhPpFmFemKVwo8Cish1-yDuQlW5yWDQ',
-    role: 'student',
-    rollNumber: 'CS22B011',
-    joinedDate: 'Sep 2024',
-  },
-];
+// Clean Production Database - All demo fixtures removed
+let classrooms: any[] = [];
+let registeredUsers: any[] = [];
+let currentUser: any = null;
+let subjects: any[] = [];
+let materials: any[] = [];
+let announcements: any[] = [];
+let exams: any[] = [];
+let members: any[] = [];
 
 // API Endpoints
 app.get('/api/health', (req, res) => {
@@ -739,9 +61,9 @@ app.get('/api/auth/demo-users', (req, res) => {
 // Current user profile & their single specific enrolled classroom
 app.get('/api/auth/me', (req, res) => {
   if (!currentUser) {
-    return res.status(401).json({ authenticated: false });
+    return res.json({ authenticated: false, user: null, classroom: null });
   }
-  const userClassroom = classrooms.find((c) => c.id === currentUser.classroomId) || classrooms[0];
+  const userClassroom = classrooms.find((c) => c.id === currentUser.classroomId) || classrooms[0] || null;
   res.json({
     authenticated: true,
     user: currentUser,
@@ -750,6 +72,9 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.get('/api/user', (req, res) => {
+  if (!currentUser) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
   res.json(currentUser);
 });
 
@@ -777,7 +102,7 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid password for this institutional account. Please check your credentials.' });
     }
   } else {
-    // If student has an institution-provided credential not yet in memory, authenticate and register in default cohort
+    // If student has an institution-provided credential not yet in memory, authenticate and register
     const defaultCls = classrooms[0];
     const newId = `user-${Date.now()}`;
     const nameFromEmail = cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -789,9 +114,9 @@ app.post('/api/auth/login', (req, res) => {
       password: cleanPassword,
       avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
       role: 'student',
-      department: 'Computer Science & Engineering',
+      department: defaultCls ? defaultCls.department : 'General Academic',
       rollNumber: `STU${Math.floor(1000 + Math.random() * 9000)}`,
-      classroomId: defaultCls.id,
+      classroomId: defaultCls ? defaultCls.id : '',
     };
     registeredUsers.push(foundUser);
     
@@ -805,11 +130,13 @@ app.post('/api/auth/login', (req, res) => {
       rollNumber: foundUser.rollNumber,
       joinedDate: 'Just now',
     });
-    defaultCls.memberCount += 1;
+    if (defaultCls) {
+      defaultCls.memberCount += 1;
+    }
   }
 
   currentUser = foundUser;
-  const userClassroom = classrooms.find((c) => c.id === foundUser.classroomId) || classrooms[0];
+  const userClassroom = classrooms.find((c) => c.id === foundUser.classroomId) || classrooms[0] || null;
 
   res.json({
     success: true,
@@ -1022,6 +349,8 @@ app.post('/api/classrooms', (req, res) => {
 
   const newCode = `${course ? course.substring(0, 3).toUpperCase() : 'CLS'}${batchYear.slice(-2)}${section ? section.slice(-1) : 'A'}`.replace(/[^A-Z0-9]/g, '') || 'SANCT26';
 
+  const activeUser = getCurrentOrReqUser(req);
+
   const newClassroom = {
     id: `cls-${Date.now()}`,
     code: newCode,
@@ -1034,22 +363,43 @@ app.post('/api/classrooms', (req, res) => {
     batchYear,
     section,
     semester,
-    superAdminId: currentUser.id,
+    superAdminId: activeUser.id,
     memberCount: 1,
     createdAt: new Date().toISOString().split('T')[0],
   };
 
   classrooms.unshift(newClassroom);
 
-  // Link current user to this created classroom as super_admin
-  if (currentUser) {
-    currentUser.classroomId = newClassroom.id;
-    currentUser.role = 'super_admin';
-    const reg = registeredUsers.find((u) => u.id === currentUser.id);
-    if (reg) {
-      reg.classroomId = newClassroom.id;
-      reg.role = 'super_admin';
-    }
+  // Link active user to this created classroom as super_admin
+  activeUser.classroomId = newClassroom.id;
+  activeUser.role = 'super_admin';
+  currentUser = activeUser;
+
+  const regIndex = registeredUsers.findIndex((u) => u.id === activeUser.id);
+  if (regIndex >= 0) {
+    registeredUsers[regIndex].classroomId = newClassroom.id;
+    registeredUsers[regIndex].role = 'super_admin';
+  } else {
+    registeredUsers.push(activeUser);
+  }
+
+  // Ensure active user is registered in the members directory as super_admin
+  const memIndex = members.findIndex((m) => m.id === activeUser.id);
+  if (memIndex >= 0) {
+    members[memIndex].classroomId = newClassroom.id;
+    members[memIndex].role = 'super_admin';
+  } else {
+    members.push({
+      id: activeUser.id,
+      name: activeUser.name,
+      email: activeUser.email,
+      avatar: activeUser.avatar,
+      role: 'super_admin',
+      rollNumber: activeUser.rollNumber || 'ADM001',
+      joinedDate: 'Today',
+      classroomId: newClassroom.id,
+      department: activeUser.department,
+    });
   }
 
   // Register selected subjects for this classroom
@@ -1122,11 +472,22 @@ app.post('/api/classrooms/join', (req, res) => {
 // Subjects
 app.get('/api/subjects', (req, res) => {
   const { classroomId } = req.query;
-  if (classroomId) {
-    const filtered = subjects.filter((s) => s.classroomId === classroomId);
-    return res.json(filtered.length > 0 ? filtered : subjects);
-  }
-  res.json(subjects);
+  const list = classroomId
+    ? subjects.filter((s) => s.classroomId === classroomId)
+    : subjects;
+  const targetList = list.length > 0 ? list : subjects;
+
+  const subjectsWithLiveCounts = targetList.map((s) => {
+    const subMats = materials.filter((m) => m.subjectId === s.id || m.subjectCode?.toLowerCase() === s.code?.toLowerCase());
+    return {
+      ...s,
+      materialsCount: subMats.length,
+      notesCount: subMats.filter((m) => m.type === 'notes').length,
+      pyqsCount: subMats.filter((m) => m.type === 'pyqs').length,
+    };
+  });
+
+  res.json(subjectsWithLiveCounts);
 });
 
 app.get('/api/subjects/:id', (req, res) => {
@@ -1134,7 +495,13 @@ app.get('/api/subjects/:id', (req, res) => {
   if (!subject) {
     return res.status(404).json({ error: 'Subject not found' });
   }
-  res.json(subject);
+  const subMats = materials.filter((m) => m.subjectId === subject.id || m.subjectCode?.toLowerCase() === subject.code?.toLowerCase());
+  res.json({
+    ...subject,
+    materialsCount: subMats.length,
+    notesCount: subMats.filter((m) => m.type === 'notes').length,
+    pyqsCount: subMats.filter((m) => m.type === 'pyqs').length,
+  });
 });
 
 app.post('/api/subjects', (req, res) => {
@@ -1183,8 +550,9 @@ app.get('/api/materials', (req, res) => {
 });
 
 app.post('/api/materials', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const {
-    subjectId = 'sub-ds',
+    subjectId,
     subjectName,
     subjectCode,
     professor,
@@ -1211,7 +579,7 @@ app.post('/api/materials', (req, res) => {
     } else {
       subject = {
         id: `sub-${Date.now()}`,
-        classroomId: currentUser ? currentUser.classroomId : 'cls-1',
+        classroomId: activeUser.classroomId || classrooms[0]?.id || '',
         code: sCode,
         name: sName,
         professor: professor ? professor.trim() : 'Faculty Instructor',
@@ -1226,7 +594,23 @@ app.post('/api/materials', (req, res) => {
   }
 
   if (!subject) {
-    subject = subjects[0];
+    if (subjects.length > 0) {
+      subject = subjects[0];
+    } else {
+      subject = {
+        id: `sub-${Date.now()}`,
+        classroomId: activeUser.classroomId || classrooms[0]?.id || '',
+        code: subjectCode || 'ACAD101',
+        name: subjectName || 'General Academic Course',
+        professor: professor ? professor.trim() : 'Faculty Coordinator',
+        description: 'Comprehensive course materials.',
+        creditHours: 3,
+        materialsCount: 0,
+        notesCount: 0,
+        pyqsCount: 0,
+      };
+      subjects.push(subject);
+    }
   }
 
   const now = Date.now();
@@ -1247,10 +631,10 @@ app.post('/api/materials', (req, res) => {
     fileFormat,
     fileSize,
     uploadedBy: {
-      id: currentUser.id,
-      name: currentUser.name,
-      avatar: currentUser.avatar,
-      role: currentUser.role,
+      id: activeUser.id,
+      name: activeUser.name,
+      avatar: activeUser.avatar,
+      role: activeUser.role,
     },
     uploadedDate: dateFormatted,
     createdAt: now,
@@ -1275,18 +659,23 @@ app.post('/api/materials', (req, res) => {
 
 // Announcements
 app.get('/api/announcements', (req, res) => {
+  const { classroomId } = req.query;
+  if (classroomId) {
+    return res.json(announcements.filter((a) => a.classroomId === classroomId));
+  }
   res.json(announcements);
 });
 
 app.post('/api/announcements', (req, res) => {
-  const { title, description, isUrgent = false } = req.body;
+  const activeUser = getCurrentOrReqUser(req);
+  const { title, description, isUrgent = false, classroomId } = req.body;
   const newAnn = {
     id: `ann-${Date.now()}`,
-    classroomId: 'cls-1',
+    classroomId: classroomId || activeUser.classroomId || (classrooms[0]?.id || ''),
     title: title || 'New Announcement',
     description: description || '',
     timestamp: 'Just now',
-    author: currentUser.name,
+    author: activeUser.name,
     isUrgent: Boolean(isUrgent),
   };
   announcements.unshift(newAnn);
@@ -1295,11 +684,20 @@ app.post('/api/announcements', (req, res) => {
 
 // Exams
 app.get('/api/exams', (req, res) => {
+  const { classroomId } = req.query;
+  if (classroomId) {
+    return res.json(exams.filter((e) => e.classroomId === classroomId));
+  }
   res.json(exams);
 });
 
 app.post('/api/exams', (req, res) => {
-  const { subjectName, subjectCode, date, time, examType, venue, isCompleted } = req.body;
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied. Only cohort administrators can publish examination schedules.' });
+  }
+
+  const { subjectName, subjectCode, date, time, examType, venue, isCompleted, classroomId } = req.body;
   
   // Calculate days remaining dynamically relative to current date (2026-09-05)
   let daysRemaining = 14;
@@ -1312,13 +710,13 @@ app.post('/api/exams', (req, res) => {
 
   const newExam = {
     id: `exam-${Date.now()}`,
-    classroomId: 'cls-1',
+    classroomId: classroomId || activeUser.classroomId || (classrooms[0]?.id || ''),
     subjectName: subjectName || 'Subject Exam',
     subjectCode: subjectCode || 'CS300',
     date: date || '2026-09-20',
     daysRemaining,
     time: time || '10:00 AM - 01:00 PM',
-    examType: examType || venue || 'IAT 1',
+    examType: examType || venue || 'Exam',
     venue: venue || examType || 'Main Exam Hall',
     progressPercent: isCompleted || daysRemaining < 0 ? 100 : 40,
     isCompleted: Boolean(isCompleted || daysRemaining < 0),
@@ -1328,6 +726,11 @@ app.post('/api/exams', (req, res) => {
 });
 
 app.patch('/api/exams/:id', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied. Only cohort administrators can modify examination schedules.' });
+  }
+
   const exam = exams.find((e) => e.id === req.params.id);
   if (!exam) {
     return res.status(404).json({ error: 'Exam not found' });
@@ -1342,9 +745,175 @@ app.patch('/api/exams/:id', (req, res) => {
   res.json(exam);
 });
 
-// Members
+// Members Management
 app.get('/api/members', (req, res) => {
+  const { classroomId } = req.query;
+  if (classroomId) {
+    const userIdsInClassroom = registeredUsers
+      .filter((u) => u.classroomId === classroomId)
+      .map((u) => u.id);
+    const filtered = members.filter(
+      (m) => m.classroomId === classroomId || userIdsInClassroom.includes(m.id)
+    );
+    return res.json(filtered);
+  }
   res.json(members);
+});
+
+// Add Member using Institutional Email
+app.post('/api/members', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Only cohort administrators can add members.' });
+  }
+
+  const { email, name, rollNumber, role = 'student', department, classroomId } = req.body;
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Institutional email is required' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const targetClassroomId = classroomId || activeUser.classroomId || classrooms[0]?.id;
+
+  if (!targetClassroomId) {
+    return res.status(400).json({ error: 'No active classroom found to enroll member into.' });
+  }
+
+  // Check if member with this email already exists in this cohort
+  const existingInClass = members.find(
+    (m) =>
+      (m.classroomId === targetClassroomId ||
+        registeredUsers.some((u) => u.id === m.id && u.classroomId === targetClassroomId)) &&
+      m.email.toLowerCase() === cleanEmail
+  );
+  if (existingInClass) {
+    return res.status(400).json({ error: 'A member with this institutional email is already enrolled in this cohort.' });
+  }
+
+  const memberName =
+    name && name.trim()
+      ? name.trim()
+      : cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  const memberRoll =
+    rollNumber && rollNumber.trim()
+      ? rollNumber.trim().toUpperCase()
+      : `ROLL-${Math.floor(100 + Math.random() * 900)}`;
+  const memberRole = role === 'admin' ? 'admin' : 'student';
+
+  const defaultAvatars = [
+    'https://lh3.googleusercontent.com/aida-public/AB6AXuAZtyqQ3lycnq7AMccaFmVziEt3AOMSS90B5pj4-UFEp42WGtql_hBxHwcbB4K-JONAFXKO9-abTCyW9oAG_JgeGVlyq9sx6f93oFLYzHV7HCo51NPdlO26vXmieOXaRjm9rM5PtUHLrI_sqCf2yGFoWopo6LDOqBuZahjQVNFzuGvnqdcddWtdhK7MMA_LBxaxaSFpgc6om_JSFb5BVA_HqzGkhPpFmFemKVwo8Cish1-yDuQlW5yWDQ',
+    'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
+    'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
+  ];
+
+  const newMemberId = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const avatar = defaultAvatars[Math.floor(Math.random() * defaultAvatars.length)];
+
+  const newUser = {
+    id: newMemberId,
+    name: memberName,
+    email: cleanEmail,
+    password: 'password123',
+    avatar,
+    role: memberRole,
+    department: department || activeUser.department || 'Academic Studies',
+    rollNumber: memberRoll,
+    classroomId: targetClassroomId,
+  };
+  registeredUsers.push(newUser);
+
+  const newMemberRecord = {
+    id: newMemberId,
+    name: memberName,
+    email: cleanEmail,
+    avatar,
+    role: memberRole,
+    rollNumber: memberRoll,
+    joinedDate: 'Today',
+    classroomId: targetClassroomId,
+    department: newUser.department,
+  };
+  members.push(newMemberRecord);
+
+  const targetClassroom = classrooms.find((c) => c.id === targetClassroomId);
+  if (targetClassroom) {
+    targetClassroom.memberCount = (targetClassroom.memberCount || 0) + 1;
+  }
+
+  res.status(201).json(newMemberRecord);
+});
+
+// Update Member Role (Grant/Revoke Admin Access)
+app.patch('/api/members/:id/role', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Only cohort administrators can manage member roles.' });
+  }
+
+  const { id } = req.params;
+  const { role } = req.body;
+
+  if (!role || !['admin', 'student'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be admin or student.' });
+  }
+
+  const member = members.find((m) => m.id === id);
+  if (!member) {
+    return res.status(404).json({ error: 'Member not found.' });
+  }
+
+  if (member.role === 'super_admin') {
+    return res.status(403).json({ error: 'Cannot modify permissions of Super Admin.' });
+  }
+
+  // A regular admin cannot demote another admin unless they are super_admin
+  if (activeUser.role === 'admin' && member.role === 'admin' && role === 'student') {
+    return res.status(403).json({ error: 'Only the Super Admin can demote other administrators.' });
+  }
+
+  member.role = role as any;
+
+  const regUser = registeredUsers.find((u) => u.id === id);
+  if (regUser) {
+    regUser.role = role as any;
+  }
+
+  if (currentUser && currentUser.id === id) {
+    currentUser.role = role as any;
+  }
+
+  res.json({ success: true, member });
+});
+
+// Delete/Remove Member from Cohort
+app.delete('/api/members/:id', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Only cohort administrators can remove members.' });
+  }
+
+  const { id } = req.params;
+  const index = members.findIndex((m) => m.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Member not found.' });
+  }
+
+  if (members[index].role === 'super_admin') {
+    return res.status(403).json({ error: 'Cannot remove Super Admin.' });
+  }
+
+  const removed = members.splice(index, 1)[0];
+  const regIdx = registeredUsers.findIndex((u) => u.id === id);
+  if (regIdx !== -1) {
+    registeredUsers.splice(regIdx, 1);
+  }
+
+  const cls = classrooms.find((c) => c.id === removed.classroomId);
+  if (cls && cls.memberCount > 1) {
+    cls.memberCount -= 1;
+  }
+
+  res.json({ success: true, member: removed });
 });
 
 // ==========================================
@@ -1409,163 +978,30 @@ interface ChatMessageRecord {
   starredBy?: string[];
 }
 
-// In-Memory Database Collections with Relational Indexes
-let chatGroups: ChatGroupRecord[] = [
-  {
-    id: 'grp-cohort-cls-1',
-    classroomId: 'cls-1',
-    name: 'BTECH26A - General Cohort',
-    avatar: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=150&auto=format&fit=crop&q=80',
-    description: 'Official cohort group for all Section A members to coordinate lectures, lab submissions, exam dates, and lecture notes.',
-    isDirect: false,
-    createdBy: 'user-sarah',
-    createdAt: '2026-08-15T09:00:00Z',
-    updatedAt: '2026-09-06T10:30:00Z',
-  },
-  {
-    id: 'grp-algo-prep',
-    classroomId: 'cls-1',
-    name: 'CS301 Data Structures & Algorithms Prep',
-    avatar: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=150&auto=format&fit=crop&q=80',
-    description: 'Daily algorithmic problem discussion, viva preparation, and dynamic programming tips.',
-    isDirect: false,
-    createdBy: 'user-elena',
-    createdAt: '2026-08-22T14:30:00Z',
-    updatedAt: '2026-09-06T09:15:00Z',
-  },
-  {
-    id: 'dm-sarah-elena',
-    classroomId: 'cls-1',
-    name: 'Elena Rostova',
+// In-Memory Database Collections with Relational Indexes (Clean Initial State)
+let chatGroups: ChatGroupRecord[] = [];
+let chatGroupMembers: GroupMemberRecord[] = [];
+let chatMessages: ChatMessageRecord[] = [];
+
+// Helper to safely get active user or request fallback
+function getCurrentOrReqUser(req?: express.Request) {
+  if (currentUser) return currentUser;
+  const headerUserId = req ? ((req.headers['x-user-id'] as string) || (req.query.userId as string)) : undefined;
+  if (headerUserId) {
+    const found = registeredUsers.find((u) => u.id === headerUserId) || members.find((m) => m.id === headerUserId);
+    if (found) return found;
+  }
+  return {
+    id: 'user-guest',
+    name: 'Classmate',
+    email: 'student@academic.edu',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    description: 'Direct Conversation',
-    isDirect: true,
-    createdBy: 'user-sarah',
-    createdAt: '2026-08-25T11:00:00Z',
-    updatedAt: '2026-09-06T08:45:00Z',
-  },
-];
-
-let chatGroupMembers: GroupMemberRecord[] = [
-  // General cohort
-  { groupId: 'grp-cohort-cls-1', userId: 'user-sarah', role: 'admin', joinedAt: '2026-08-15T09:00:00Z' },
-  { groupId: 'grp-cohort-cls-1', userId: 'user-michael', role: 'admin', joinedAt: '2026-08-15T09:05:00Z' },
-  { groupId: 'grp-cohort-cls-1', userId: 'user-elena', role: 'member', joinedAt: '2026-08-15T09:10:00Z' },
-  { groupId: 'grp-cohort-cls-1', userId: 'user-david', role: 'member', joinedAt: '2026-08-15T09:15:00Z' },
-
-  // DSA Prep
-  { groupId: 'grp-algo-prep', userId: 'user-elena', role: 'admin', joinedAt: '2026-08-22T14:30:00Z' },
-  { groupId: 'grp-algo-prep', userId: 'user-sarah', role: 'member', joinedAt: '2026-08-22T14:32:00Z' },
-  { groupId: 'grp-algo-prep', userId: 'user-david', role: 'member', joinedAt: '2026-08-22T14:35:00Z' },
-
-  // Direct DM Sarah & Elena
-  { groupId: 'dm-sarah-elena', userId: 'user-sarah', role: 'admin', joinedAt: '2026-08-25T11:00:00Z' },
-  { groupId: 'dm-sarah-elena', userId: 'user-elena', role: 'admin', joinedAt: '2026-08-25T11:00:00Z' },
-];
-
-let chatMessages: ChatMessageRecord[] = [
-  {
-    id: 'msg-101',
-    groupId: 'grp-cohort-cls-1',
-    senderId: 'user-sarah',
-    senderName: 'Sarah Jenkins',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-    type: 'text',
-    content: 'Welcome everyone to the official BTECH26A cohort chat! You can forward lecture notes, snap textbook queries, and organize study sessions here.',
-    timestamp: 'Yesterday, 02:15 PM',
-    createdAt: Date.now() - 86400000 + 5000,
-    deliveredTo: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-    readBy: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-  },
-  {
-    id: 'msg-102',
-    groupId: 'grp-cohort-cls-1',
-    senderId: 'user-michael',
-    senderName: 'Michael Klein',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-    type: 'text',
-    content: 'I have verified and forwarded our Unit 3 Tree Traversals slides from the library. You can check them directly below:',
-    timestamp: 'Yesterday, 03:20 PM',
-    createdAt: Date.now() - 86400000 + 40000,
-    deliveredTo: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-    readBy: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-  },
-  {
-    id: 'msg-103',
-    groupId: 'grp-cohort-cls-1',
-    senderId: 'user-michael',
-    senderName: 'Michael Klein',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBi-zIOKYT1CTN9RV3ZzQNieXOigrdCfr81_ihfbOqXHZzoMgFBdaEoBMZKl89hXhj_Om3SEgrx7dTB_i9FJqzma_T0g0Tf3DtnuXuWmMdQnaX-eOgOcdJLbUhWfy34CChRKQFpmloUWTp4QMGnnPQ-C3Lndf0MXhLQ80s437Z0YbdROLpO8-R6f8rAPpT8SPOAHaGk_thBcwBigM4TyxJMNJZWmNHABG_qY1TNnmdM-E3z0-9U-ATvg',
-    type: 'material_forward',
-    content: 'Unit 3 Binary Trees & Traversals Complete Slides',
-    forwardedMaterial: {
-      id: 'mat-ds-1',
-      title: 'Unit 3 Binary Trees & Traversals Complete Slides',
-      subjectCode: 'CS301',
-      subjectName: 'Data Structures',
-      type: 'slides',
-      fileFormat: 'PDF',
-      fileSize: '4.2 MB',
-      snippet: 'Binary search tree invariants, AVL tree balancing rotations, and Morris in-order traversal algorithms.',
-    },
-    timestamp: 'Yesterday, 03:22 PM',
-    createdAt: Date.now() - 86400000 + 45000,
-    deliveredTo: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-    readBy: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-  },
-  {
-    id: 'msg-104',
-    groupId: 'grp-cohort-cls-1',
-    senderId: 'user-elena',
-    senderName: 'Elena Rostova',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    type: 'text',
-    content: 'Super helpful Michael! Does anyone want to practice the previous year questions together before the IAT 1 exams?',
-    timestamp: 'Today, 09:30 AM',
-    createdAt: Date.now() - 3600000,
-    deliveredTo: ['user-sarah', 'user-elena', 'user-michael', 'user-david'],
-    readBy: ['user-sarah', 'user-elena'],
-  },
-  {
-    id: 'msg-201',
-    groupId: 'grp-algo-prep',
-    senderId: 'user-elena',
-    senderName: 'Elena Rostova',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    type: 'text',
-    content: 'Hey squad! We are solving topological sort and Dijkstra shortest paths today. Bring your notebook questions.',
-    timestamp: 'Today, 08:45 AM',
-    createdAt: Date.now() - 7200000,
-    deliveredTo: ['user-sarah', 'user-elena', 'user-david'],
-    readBy: ['user-sarah', 'user-elena'],
-  },
-  {
-    id: 'msg-301',
-    groupId: 'dm-sarah-elena',
-    senderId: 'user-elena',
-    senderName: 'Elena Rostova',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
-    type: 'text',
-    content: 'Hi Sarah, are you going to be at the central library seminar room after our 2 PM lecture?',
-    timestamp: 'Today, 10:15 AM',
-    createdAt: Date.now() - 1800000,
-    deliveredTo: ['user-sarah', 'user-elena'],
-    readBy: ['user-sarah', 'user-elena'],
-  },
-  {
-    id: 'msg-302',
-    groupId: 'dm-sarah-elena',
-    senderId: 'user-sarah',
-    senderName: 'Sarah Jenkins',
-    senderAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-    type: 'text',
-    content: 'Yes! I have reserved desk 4. See you there!',
-    timestamp: 'Today, 10:20 AM',
-    createdAt: Date.now() - 1500000,
-    deliveredTo: ['user-sarah', 'user-elena'],
-    readBy: ['user-sarah', 'user-elena'],
-  },
-];
+    role: 'student',
+    department: 'General Studies',
+    rollNumber: 'STU001',
+    classroomId: classrooms[0]?.id || '',
+  };
+}
 
 // Active WebSocket Clients & Online Presence
 const connectedSockets = new Map<WebSocket, { userId: string; classroomId: string }>();
@@ -1611,8 +1047,8 @@ wss.on('connection', (ws: WebSocket) => {
       const data = JSON.parse(messageRaw.toString());
       
       if (data.type === 'auth') {
-        const userId = data.userId || currentUser.id;
-        const classroomId = data.classroomId || currentUser.classroomId;
+        const userId = data.userId || (currentUser ? currentUser.id : 'user-guest');
+        const classroomId = data.classroomId || (currentUser ? currentUser.classroomId : '');
         connectedSockets.set(ws, { userId, classroomId });
 
         // Send current list of online users to the connected client
@@ -1706,8 +1142,9 @@ function getMemberProfile(userId: string) {
 
 // 1. Get all conversations (Groups & DMs) for current user
 app.get('/api/chat/groups', (req, res) => {
-  const classroomId = (req.query.classroomId as string) || currentUser.classroomId || 'cls-1';
-  const userId = (req.query.userId as string) || currentUser.id;
+  const activeUser = getCurrentOrReqUser(req);
+  const classroomId = (req.query.classroomId as string) || activeUser.classroomId || (classrooms[0]?.id || '');
+  const userId = (req.query.userId as string) || activeUser.id;
 
   // Find all groups where userId is a member
   const userMemberships = chatGroupMembers.filter((m) => m.userId === userId);
@@ -1783,6 +1220,13 @@ app.get('/api/chat/groups', (req, res) => {
 
 // 2. Create a new Group
 app.post('/api/chat/groups', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Only cohort administrators can create group channels. You can message classmates directly via direct message.',
+    });
+  }
+
   const { name, avatar, description, memberIds = [], classroomId } = req.body;
 
   if (!name || !name.trim()) {
@@ -1790,7 +1234,7 @@ app.post('/api/chat/groups', (req, res) => {
   }
 
   const groupId = `grp-${Date.now()}`;
-  const effectiveClassroomId = classroomId || currentUser.classroomId || 'cls-1';
+  const effectiveClassroomId = classroomId || activeUser.classroomId || (classrooms[0]?.id || '');
   const groupAvatar =
     avatar ||
     'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80';
@@ -1802,7 +1246,7 @@ app.post('/api/chat/groups', (req, res) => {
     avatar: groupAvatar,
     description: (description || '').trim(),
     isDirect: false,
-    createdBy: currentUser.id,
+    createdBy: activeUser.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1812,14 +1256,14 @@ app.post('/api/chat/groups', (req, res) => {
   // Group creator becomes admin
   chatGroupMembers.push({
     groupId,
-    userId: currentUser.id,
+    userId: activeUser.id,
     role: 'admin',
     joinedAt: new Date().toISOString(),
   });
 
   // Add selected members
   const uniqueMemberIds = Array.from(new Set(memberIds as string[])).filter(
-    (id) => id !== currentUser.id
+    (id) => id !== activeUser.id
   );
   uniqueMemberIds.forEach((uid) => {
     chatGroupMembers.push({
@@ -1834,15 +1278,15 @@ app.post('/api/chat/groups', (req, res) => {
   const welcomeMsg: ChatMessageRecord = {
     id: `msg-${Date.now()}`,
     groupId,
-    senderId: currentUser.id,
-    senderName: currentUser.name,
-    senderAvatar: currentUser.avatar,
+    senderId: activeUser.id,
+    senderName: activeUser.name,
+    senderAvatar: activeUser.avatar,
     type: 'text',
     content: `Created group "${newGroup.name}". Welcome everyone!`,
     timestamp: 'Just now',
     createdAt: Date.now(),
-    deliveredTo: [currentUser.id],
-    readBy: [currentUser.id],
+    deliveredTo: [activeUser.id],
+    readBy: [activeUser.id],
   };
   chatMessages.push(welcomeMsg);
 
@@ -1854,8 +1298,8 @@ app.post('/api/chat/groups', (req, res) => {
 
   res.status(201).json({
     ...newGroup,
-    adminIds: [currentUser.id],
-    memberIds: [currentUser.id, ...uniqueMemberIds],
+    adminIds: [activeUser.id],
+    memberIds: [activeUser.id, ...uniqueMemberIds],
     unreadCount: 0,
     lastMessage: {
       text: welcomeMsg.content,
@@ -1869,16 +1313,17 @@ app.post('/api/chat/groups', (req, res) => {
 
 // 3. Get or Create a 1-on-1 Direct Chat
 app.post('/api/chat/direct', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const { targetUserId, classroomId } = req.body;
   if (!targetUserId) {
     return res.status(400).json({ error: 'Target user ID is required' });
   }
 
-  const effectiveClassroomId = classroomId || currentUser.classroomId || 'cls-1';
+  const effectiveClassroomId = classroomId || activeUser.classroomId || (classrooms[0]?.id || '');
 
   // Check if a direct chat between these two already exists
   const myDms = chatGroupMembers
-    .filter((m) => m.userId === currentUser.id)
+    .filter((m) => m.userId === activeUser.id)
     .map((m) => m.groupId);
 
   let existingGroupId: string | null = null;
@@ -1902,13 +1347,13 @@ app.post('/api/chat/direct', (req, res) => {
       ...grp,
       name: targetUser.name,
       avatar: targetUser.avatar,
-      adminIds: [currentUser.id, targetUserId],
-      memberIds: [currentUser.id, targetUserId],
+      adminIds: [activeUser.id, targetUserId],
+      memberIds: [activeUser.id, targetUserId],
     });
   }
 
   // Create new Direct Chat
-  const newDmId = `dm-${[currentUser.id, targetUserId].sort().join('-')}`;
+  const newDmId = `dm-${[activeUser.id, targetUserId].sort().join('-')}`;
   const targetUser = getMemberProfile(targetUserId);
 
   const newDm: ChatGroupRecord = {
@@ -1918,7 +1363,7 @@ app.post('/api/chat/direct', (req, res) => {
     avatar: targetUser.avatar,
     description: 'Direct Message',
     isDirect: true,
-    createdBy: currentUser.id,
+    createdBy: activeUser.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1926,7 +1371,7 @@ app.post('/api/chat/direct', (req, res) => {
   chatGroups.push(newDm);
   chatGroupMembers.push({
     groupId: newDmId,
-    userId: currentUser.id,
+    userId: activeUser.id,
     role: 'admin',
     joinedAt: new Date().toISOString(),
   });
@@ -1941,8 +1386,8 @@ app.post('/api/chat/direct', (req, res) => {
     ...newDm,
     name: targetUser.name,
     avatar: targetUser.avatar,
-    adminIds: [currentUser.id, targetUserId],
-    memberIds: [currentUser.id, targetUserId],
+    adminIds: [activeUser.id, targetUserId],
+    memberIds: [activeUser.id, targetUserId],
   });
 });
 
@@ -1984,8 +1429,9 @@ app.patch('/api/chat/groups/:id', (req, res) => {
   }
 
   // Security Check: Verify user is an admin
+  const activeUser = getCurrentOrReqUser(req);
   const userMember = chatGroupMembers.find(
-    (m) => m.groupId === group.id && m.userId === currentUser.id
+    (m) => m.groupId === group.id && m.userId === activeUser.id
   );
   if (!userMember || userMember.role !== 'admin') {
     return res.status(403).json({ error: 'Only group admins can update group settings' });
@@ -2008,6 +1454,7 @@ app.patch('/api/chat/groups/:id', (req, res) => {
 
 // 6. Delete Group (Admin only)
 app.delete('/api/chat/groups/:id', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const groupIndex = chatGroups.findIndex((g) => g.id === req.params.id);
   if (groupIndex === -1) {
     return res.status(404).json({ error: 'Group not found' });
@@ -2015,7 +1462,7 @@ app.delete('/api/chat/groups/:id', (req, res) => {
 
   const group = chatGroups[groupIndex];
   const userMember = chatGroupMembers.find(
-    (m) => m.groupId === group.id && m.userId === currentUser.id
+    (m) => m.groupId === group.id && m.userId === activeUser.id
   );
   if (!userMember || userMember.role !== 'admin') {
     return res.status(403).json({ error: 'Only group admins can delete the group' });
@@ -2037,11 +1484,12 @@ app.delete('/api/chat/groups/:id', (req, res) => {
 
 // 7. Add Members to Group (Admin only)
 app.post('/api/chat/groups/:id/members', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const group = chatGroups.find((g) => g.id === req.params.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   const adminMember = chatGroupMembers.find(
-    (m) => m.groupId === group.id && m.userId === currentUser.id
+    (m) => m.groupId === group.id && m.userId === activeUser.id
   );
   if (!adminMember || adminMember.role !== 'admin') {
     return res.status(403).json({ error: 'Only group admins can add members' });
@@ -2078,16 +1526,17 @@ app.post('/api/chat/groups/:id/members', (req, res) => {
 
 // 8. Remove Member or Leave Group
 app.delete('/api/chat/groups/:id/members/:userId', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const group = chatGroups.find((g) => g.id === req.params.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   const targetUserId = req.params.userId;
   const callerMember = chatGroupMembers.find(
-    (m) => m.groupId === group.id && m.userId === currentUser.id
+    (m) => m.groupId === group.id && m.userId === activeUser.id
   );
 
   // Self removal (leaving) OR admin removal
-  const isSelf = targetUserId === currentUser.id;
+  const isSelf = targetUserId === activeUser.id;
   const isAdmin = callerMember && callerMember.role === 'admin';
 
   if (!isSelf && !isAdmin) {
@@ -2109,11 +1558,12 @@ app.delete('/api/chat/groups/:id/members/:userId', (req, res) => {
 
 // 9. Promote or Demote Member Role (Admin only)
 app.patch('/api/chat/groups/:id/members/:userId/role', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const group = chatGroups.find((g) => g.id === req.params.id);
   if (!group) return res.status(404).json({ error: 'Group not found' });
 
   const callerMember = chatGroupMembers.find(
-    (m) => m.groupId === group.id && m.userId === currentUser.id
+    (m) => m.groupId === group.id && m.userId === activeUser.id
   );
   if (!callerMember || callerMember.role !== 'admin') {
     return res.status(403).json({ error: 'Only admins can change member roles' });
@@ -2143,21 +1593,22 @@ app.patch('/api/chat/groups/:id/members/:userId/role', (req, res) => {
 
 // 10. Get Messages for a Group
 app.get('/api/chat/groups/:id/messages', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const groupId = req.params.id;
 
   // Verify caller is a member of this group
   const isMember = chatGroupMembers.some(
-    (m) => m.groupId === groupId && m.userId === currentUser.id
+    (m) => m.groupId === groupId && m.userId === activeUser.id
   );
   if (!isMember) {
     return res.status(403).json({ error: 'Access denied: You are not a member of this conversation' });
   }
 
-  // Mark delivered to currentUser
+  // Mark delivered to activeUser
   const groupMsgs = chatMessages.filter((m) => m.groupId === groupId);
   groupMsgs.forEach((m) => {
-    if (!m.deliveredTo.includes(currentUser.id)) {
-      m.deliveredTo.push(currentUser.id);
+    if (!m.deliveredTo.includes(activeUser.id)) {
+      m.deliveredTo.push(activeUser.id);
     }
   });
 
@@ -2166,9 +1617,10 @@ app.get('/api/chat/groups/:id/messages', (req, res) => {
 
 // 11. Send a Message (Text, Forward Material, Camera Snap, or File)
 app.post('/api/chat/groups/:id/messages', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const groupId = req.params.id;
   const isMember = chatGroupMembers.some(
-    (m) => m.groupId === groupId && m.userId === currentUser.id
+    (m) => m.groupId === groupId && m.userId === activeUser.id
   );
   if (!isMember) {
     return res.status(403).json({ error: 'Cannot send message to a group you do not belong to' });
@@ -2186,9 +1638,9 @@ app.post('/api/chat/groups/:id/messages', (req, res) => {
   const newMsg: ChatMessageRecord = {
     id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     groupId,
-    senderId: currentUser.id,
-    senderName: currentUser.name,
-    senderAvatar: currentUser.avatar,
+    senderId: activeUser.id,
+    senderName: activeUser.name,
+    senderAvatar: activeUser.avatar,
     type,
     content: (content || '').trim(),
     fileUrl,
@@ -2199,8 +1651,8 @@ app.post('/api/chat/groups/:id/messages', (req, res) => {
     reactions: [],
     timestamp: timeFormatted,
     createdAt: Date.now(),
-    deliveredTo: [currentUser.id],
-    readBy: [currentUser.id],
+    deliveredTo: [activeUser.id],
+    readBy: [activeUser.id],
   };
 
   chatMessages.push(newMsg);
@@ -2223,6 +1675,7 @@ app.post('/api/chat/groups/:id/messages', (req, res) => {
 
 // 12. React to Message (Toggle reaction)
 app.post('/api/chat/messages/:id/react', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const msg = chatMessages.find((m) => m.id === req.params.id);
   if (!msg) return res.status(404).json({ error: 'Message not found' });
   const { emoji } = req.body;
@@ -2230,7 +1683,7 @@ app.post('/api/chat/messages/:id/react', (req, res) => {
 
   if (!msg.reactions) msg.reactions = [];
   const existingIndex = msg.reactions.findIndex(
-    (r) => r.userId === currentUser.id && r.emoji === emoji
+    (r) => r.userId === activeUser.id && r.emoji === emoji
   );
 
   if (existingIndex > -1) {
@@ -2240,8 +1693,8 @@ app.post('/api/chat/messages/:id/react', (req, res) => {
     // Add reaction
     msg.reactions.push({
       emoji,
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: activeUser.id,
+      userName: activeUser.name,
     });
   }
 
@@ -2292,17 +1745,18 @@ app.post('/api/chat/messages/:id/pin', (req, res) => {
 
 // 14. Star / Unstar Message
 app.post('/api/chat/messages/:id/star', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const msg = chatMessages.find((m) => m.id === req.params.id);
   if (!msg) return res.status(404).json({ error: 'Message not found' });
 
   if (!msg.starredBy) msg.starredBy = [];
-  const idx = msg.starredBy.indexOf(currentUser.id);
+  const idx = msg.starredBy.indexOf(activeUser.id);
   let isStarred = false;
   if (idx > -1) {
     msg.starredBy.splice(idx, 1);
     isStarred = false;
   } else {
-    msg.starredBy.push(currentUser.id);
+    msg.starredBy.push(activeUser.id);
     isStarred = true;
   }
   msg.isStarred = isStarred;
@@ -2312,6 +1766,7 @@ app.post('/api/chat/messages/:id/star', (req, res) => {
 
 // 15. Forward Message to target group(s)
 app.post('/api/chat/messages/forward', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const { messageId, targetGroupIds } = req.body;
   const sourceMsg = chatMessages.find((m) => m.id === messageId);
   if (!sourceMsg) return res.status(404).json({ error: 'Source message not found' });
@@ -2325,16 +1780,16 @@ app.post('/api/chat/messages/forward', (req, res) => {
 
   for (const tGroupId of targetGroupIds) {
     const isMember = chatGroupMembers.some(
-      (m) => m.groupId === tGroupId && m.userId === currentUser.id
+      (m) => m.groupId === tGroupId && m.userId === activeUser.id
     );
     if (!isMember) continue;
 
     const fwdMsg: ChatMessageRecord = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       groupId: tGroupId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
+      senderId: activeUser.id,
+      senderName: activeUser.name,
+      senderAvatar: activeUser.avatar,
       type: sourceMsg.type,
       content: sourceMsg.content,
       fileUrl: sourceMsg.fileUrl,
@@ -2343,8 +1798,8 @@ app.post('/api/chat/messages/forward', (req, res) => {
       forwardedMaterial: sourceMsg.forwardedMaterial,
       timestamp: timeFormatted,
       createdAt: Date.now(),
-      deliveredTo: [currentUser.id],
-      readBy: [currentUser.id],
+      deliveredTo: [activeUser.id],
+      readBy: [activeUser.id],
     };
 
     chatMessages.push(fwdMsg);
@@ -2365,12 +1820,13 @@ app.post('/api/chat/messages/forward', (req, res) => {
 
 // 15b. Forward Material to Multiple Groups / Direct Chats
 app.post('/api/chat/materials/forward', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const { material, targetGroupIds, targetUserIds, note } = req.body;
   if (!material) {
     return res.status(400).json({ error: 'Material is required' });
   }
 
-  const effectiveClassroomId = currentUser.classroomId || 'cls-1';
+  const effectiveClassroomId = activeUser.classroomId || (classrooms[0]?.id || '');
   const resolvedGroupIds = new Set<string>();
 
   if (Array.isArray(targetGroupIds)) {
@@ -2382,10 +1838,10 @@ app.post('/api/chat/materials/forward', (req, res) => {
   // If targetUserIds provided, resolve or create direct chat DMs
   if (Array.isArray(targetUserIds)) {
     for (const targetUserId of targetUserIds) {
-      if (!targetUserId || targetUserId === currentUser.id) continue;
+      if (!targetUserId || targetUserId === activeUser.id) continue;
 
       const myDms = chatGroupMembers
-        .filter((m) => m.userId === currentUser.id)
+        .filter((m) => m.userId === activeUser.id)
         .map((m) => m.groupId);
 
       let existingGroupId: string | null = null;
@@ -2406,7 +1862,7 @@ app.post('/api/chat/materials/forward', (req, res) => {
         resolvedGroupIds.add(existingGroupId);
       } else {
         // Create new Direct Chat
-        const newDmId = `dm-${[currentUser.id, targetUserId].sort().join('-')}`;
+        const newDmId = `dm-${[activeUser.id, targetUserId].sort().join('-')}`;
         const targetUser = getMemberProfile(targetUserId);
 
         const newDm: ChatGroupRecord = {
@@ -2416,7 +1872,7 @@ app.post('/api/chat/materials/forward', (req, res) => {
           avatar: targetUser.avatar,
           description: 'Direct Message',
           isDirect: true,
-          createdBy: currentUser.id,
+          createdBy: activeUser.id,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -2424,7 +1880,7 @@ app.post('/api/chat/materials/forward', (req, res) => {
         chatGroups.push(newDm);
         chatGroupMembers.push({
           groupId: newDmId,
-          userId: currentUser.id,
+          userId: activeUser.id,
           role: 'admin',
           joinedAt: new Date().toISOString(),
         });
@@ -2461,23 +1917,23 @@ app.post('/api/chat/materials/forward', (req, res) => {
 
   for (const tGroupId of resolvedGroupIds) {
     const isMember = chatGroupMembers.some(
-      (m) => m.groupId === tGroupId && m.userId === currentUser.id
+      (m) => m.groupId === tGroupId && m.userId === activeUser.id
     );
     if (!isMember) continue;
 
     const fwdMsg: ChatMessageRecord = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       groupId: tGroupId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
+      senderId: activeUser.id,
+      senderName: activeUser.name,
+      senderAvatar: activeUser.avatar,
       type: 'material_forward',
       content: note && typeof note === 'string' && note.trim() ? note.trim() : material.title,
       forwardedMaterial: forwardedMaterialInfo,
       timestamp: timeFormatted,
       createdAt: Date.now(),
-      deliveredTo: [currentUser.id],
-      readBy: [currentUser.id],
+      deliveredTo: [activeUser.id],
+      readBy: [activeUser.id],
     };
 
     chatMessages.push(fwdMsg);
@@ -2504,13 +1960,14 @@ app.post('/api/chat/materials/forward', (req, res) => {
 
 // 16. Delete Message
 app.delete('/api/chat/messages/:id', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const msg = chatMessages.find((m) => m.id === req.params.id);
   if (!msg) return res.status(404).json({ error: 'Message not found' });
 
   // Security: Only sender or group admin can delete
-  const isSender = msg.senderId === currentUser.id;
+  const isSender = msg.senderId === activeUser.id;
   const callerMember = chatGroupMembers.find(
-    (m) => m.groupId === msg.groupId && m.userId === currentUser.id
+    (m) => m.groupId === msg.groupId && m.userId === activeUser.id
   );
   const isAdmin = callerMember && callerMember.role === 'admin';
 
@@ -2534,22 +1991,23 @@ app.delete('/api/chat/messages/:id', (req, res) => {
 
 // 17. Mark Conversation Messages as Read
 app.post('/api/chat/groups/:id/read', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
   const groupId = req.params.id;
   const unread = chatMessages.filter(
-    (m) => m.groupId === groupId && !m.readBy.includes(currentUser.id)
+    (m) => m.groupId === groupId && !m.readBy.includes(activeUser.id)
   );
 
   unread.forEach((m) => {
-    m.readBy.push(currentUser.id);
-    if (!m.deliveredTo.includes(currentUser.id)) {
-      m.deliveredTo.push(currentUser.id);
+    m.readBy.push(activeUser.id);
+    if (!m.deliveredTo.includes(activeUser.id)) {
+      m.deliveredTo.push(activeUser.id);
     }
   });
 
   broadcastToGroup(groupId, {
     type: 'chat:read_receipt',
     groupId,
-    userId: currentUser.id,
+    userId: activeUser.id,
   });
 
   res.json({ success: true, readCount: unread.length });

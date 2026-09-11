@@ -50,20 +50,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Signup form state (Name, Reg No, Department, Institutional Mail ID, Password)
   const [signupName, setSignupName] = useState('');
   const [signupRegNo, setSignupRegNo] = useState('');
-  const [signupDepartment, setSignupDepartment] = useState('Department of Computer Science');
+  const [signupDepartment, setSignupDepartment] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   
   // Single classroom enrollment choice
   const [enrollmentMode, setEnrollmentMode] = useState<'code' | 'select' | 'create'>('code');
-  const [classroomCode, setClassroomCode] = useState('BTECH26A');
-  const [selectedClassroomId, setSelectedClassroomId] = useState(classrooms[0]?.id || 'cls-1');
+  const [classroomCode, setClassroomCode] = useState('');
+  const [selectedClassroomId, setSelectedClassroomId] = useState(classrooms[0]?.id || '');
   
   // New classroom state if creating during signup
-  const [newCourseName, setNewCourseName] = useState('B.Tech Data Science');
-  const [newCollegeName, setNewCollegeName] = useState('Stanford University');
-  const [newBatchYear, setNewBatchYear] = useState('2026');
-  const [newSection, setNewSection] = useState('Section A');
+  const [newCourseName, setNewCourseName] = useState('');
+  const [newCollegeName, setNewCollegeName] = useState('');
+  const [newBatchYear, setNewBatchYear] = useState('');
+  const [newSection, setNewSection] = useState('');
 
   // Helper to check institutional email domain
   const isInstitutionalDomain = (email: string) => {
@@ -204,11 +204,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           department: signupDepartment,
           batchYear: newBatchYear,
           section: newSection,
-          selectedSubjects: [
-            'Data Structures (CS301)',
-            'Operating Systems (CS302)',
-            'Computer Networks (CS304)',
-          ],
+          selectedSubjects: [],
         };
       }
 
@@ -357,7 +353,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="email"
                   required
-                  placeholder="e.g. sarah.j@oxford.edu or your_id@college.edu"
+                  placeholder="e.g. name@institution.edu"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a] focus:ring-2 focus:ring-[#56615a]/20"
@@ -537,7 +533,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="email"
                     required
-                    placeholder="e.g. elena.r@oxford.edu"
+                    placeholder="e.g. student@institution.edu"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
                     className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
@@ -636,13 +632,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. BTECH26A"
+                    placeholder="ENTER CODE"
                     value={classroomCode}
                     onChange={(e) => setClassroomCode(e.target.value.toUpperCase())}
                     className="paper-input w-full p-4 text-base sm:text-lg font-mono font-extrabold tracking-widest text-[#1b1c1c] uppercase rounded-2xl bg-white border-2 border-[#D8D6D4] shadow-xs"
                   />
                   <span className="text-xs sm:text-sm text-[#737874] block">
-                    Tip: Try <code className="font-bold text-[#56615a] bg-white px-1.5 py-0.5 rounded border border-[#E5E4E2]">BTECH26A</code> (Oxford) or <code className="font-bold text-[#56615a] bg-white px-1.5 py-0.5 rounded border border-[#E5E4E2]">AIDS26A</code> (Stanford).
+                    Enter the unique access code provided by your cohort administrator.
                   </span>
                 </div>
               )}
@@ -675,6 +671,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </label>
                       <input
                         type="text"
+                        placeholder="e.g. B.Tech Computer Science"
                         value={newCourseName}
                         onChange={(e) => setNewCourseName(e.target.value)}
                         className="paper-input w-full p-3.5 text-sm sm:text-base rounded-2xl bg-white border-2 border-[#D8D6D4]"
@@ -686,6 +683,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </label>
                       <input
                         type="text"
+                        placeholder="e.g. University Name"
                         value={newCollegeName}
                         onChange={(e) => setNewCollegeName(e.target.value)}
                         className="paper-input w-full p-3.5 text-sm sm:text-base rounded-2xl bg-white border-2 border-[#D8D6D4]"

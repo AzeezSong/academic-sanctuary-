@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Classroom, User, Subject, Material, Announcement, Exam, Member } from './types';
+import { Classroom, User, Subject, Material, Announcement, Exam, Member, UserRole } from './types';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { LandingPage } from './components/LandingPage';
@@ -16,6 +16,7 @@ import { DocumentReaderModal } from './components/DocumentReaderModal';
 import { JoinClassroomModal } from './components/JoinClassroomModal';
 import { AuthModal } from './components/AuthModal';
 import { ChatView } from './components/chat/ChatView';
+import { MessageSquare, UserCheck, School } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -36,16 +37,7 @@ export default function App() {
   // Data states
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [activeClassroom, setActiveClassroom] = useState<Classroom | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>({
-    id: 'user-sarah',
-    name: 'Sarah Jenkins',
-    email: 'sarah.j@oxford.edu',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-    role: 'super_admin',
-    department: 'Department of Computer Science',
-    rollNumber: 'CS22B042',
-    classroomId: 'cls-1',
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -179,6 +171,11 @@ export default function App() {
   // Handlers
   const handleNavigate = (view: string, data?: any) => {
     if (view === currentView && (!data || data?.id === selectedSubject?.id)) return;
+    if ((view === 'chat' || view === 'profile') && !currentUser) {
+      showToast('Please sign in with your institutional credentials to access ' + (view === 'chat' ? 'cohort chat.' : 'your profile.'));
+      handleOpenAuth('login');
+      return;
+    }
     setNavHistory((prev) => [...prev, { view: currentView, subject: selectedSubject }]);
     if (view === 'subject-detail' && data) {
       setSelectedSubject(data);
@@ -327,9 +324,92 @@ export default function App() {
         const newExam = await res.json();
         setExams([...exams, newExam]);
         showToast(`Exam schedule added for ${newExam.subjectName}.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Only administrators can schedule exams.');
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAddMember = async (memberData: {
+    email: string;
+    name: string;
+    rollNumber: string;
+    role: 'student' | 'admin';
+    department?: string;
+  }) => {
+    if (!activeClassroom) return;
+    try {
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...memberData,
+          classroomId: activeClassroom.id,
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to enroll member.');
+      }
+      const newMember = await res.json();
+      setMembers((prev) => {
+        const exists = prev.some((m) => m.id === newMember.id);
+        if (exists) return prev;
+        return [...prev, newMember];
+      });
+      showToast(`${newMember.name} enrolled via institutional mail (${newMember.email}).`);
+      confetti({ particleCount: 35, spread: 55 });
+    } catch (err: any) {
+      showToast(err.message || 'Error adding member.');
+      throw err;
+    }
+  };
+
+  const handleUpdateMemberRole = async (memberId: string, newRole: UserRole) => {
+    try {
+      const res = await fetch(`/api/members/${memberId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to update role.');
+      }
+      const updated = await res.json();
+      setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, role: updated.role } : m)));
+      if (currentUser && currentUser.id === memberId) {
+        setCurrentUser((prev) => (prev ? { ...prev, role: updated.role } : null));
+      }
+      showToast(
+        newRole === 'admin'
+          ? `Granted Administrator access to ${updated.name}.`
+          : `Administrator access removed for ${updated.name}.`
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Error updating member role.');
+      throw err;
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const res = await fetch(`/api/members/${memberId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to remove member.');
+      }
+      const target = members.find((m) => m.id === memberId);
+      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      showToast(`Removed ${target?.name || 'member'} from cohort.`);
+    } catch (err: any) {
+      showToast(err.message || 'Error removing member.');
+      throw err;
     }
   };
 
@@ -416,27 +496,53 @@ export default function App() {
           />
         )}
 
-        {currentView === 'dashboard' && activeClassroom && (
-          <DashboardView
-            classroom={activeClassroom}
-            user={currentUser || {
-              id: 'guest',
-              name: 'Student',
-              email: 'student@sanctuary.edu',
-              avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
-              role: 'student',
-              department: 'General Studies',
-              rollNumber: 'STU001'
-            }}
-            announcements={announcements}
-            nextExam={nextExam}
-            recentMaterials={materials.slice(0, 8)}
-            onNavigate={handleNavigate}
-            onBack={handleGoBack}
-            onOpenUpload={() => handleOpenUpload()}
-            onPreviewMaterial={(mat) => setPreviewMaterial(mat)}
-            onAddAnnouncement={handleAddAnnouncement}
-          />
+        {currentView === 'dashboard' && (
+          activeClassroom ? (
+            <DashboardView
+              classroom={activeClassroom}
+              user={currentUser || {
+                id: 'guest',
+                name: 'Student',
+                email: 'student@institution.edu',
+                avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKVqp8kbAfxGqOzgulKLDI74NQiSdlDhDdFDyQV_evpa8r7d5WkZGkgnCShgY15unIPoRzhmSGM8c5eYPlAfPusWbCSY4vPjAwP8KRomBMr7KQOQX0hIJBjhcSdgOwc2dkZEXm70URgJJ9cLOY4dgO0jxryXS4sw8mAUGz6kgZFPaT6gja0ikk7HNAfoTyv5oY_mEIBEb28YJUw2rW5IOw1WBEJ7mg51EYzStKeEueXcmsQHbIoC-nA',
+                role: 'student',
+                department: 'General Studies',
+                rollNumber: 'STU001'
+              }}
+              announcements={announcements}
+              nextExam={nextExam}
+              recentMaterials={materials.slice(0, 8)}
+              onNavigate={handleNavigate}
+              onBack={handleGoBack}
+              onOpenUpload={() => handleOpenUpload()}
+              onPreviewMaterial={(mat) => setPreviewMaterial(mat)}
+              onAddAnnouncement={handleAddAnnouncement}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto my-16 p-8 bg-white border border-[#E5E4E2] rounded-3xl text-center shadow-md flex flex-col items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#d9e6dc] flex items-center justify-center text-[#56615a]">
+                <School className="w-7 h-7" />
+              </div>
+              <h2 className="text-2xl font-black text-[#1b1c1c]">No Classroom Connected</h2>
+              <p className="text-sm text-[#56615a]">
+                You are not currently enrolled in any classroom cohort. Join an existing cohort with an access code or create a new classroom for your batch.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full justify-center">
+                <button
+                  onClick={() => setIsJoinOpen(true)}
+                  className="px-6 py-3 bg-[#56615a] hover:bg-[#434d46] text-white font-bold text-sm rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  Join Classroom
+                </button>
+                <button
+                  onClick={() => handleNavigate('create-classroom')}
+                  className="px-6 py-3 bg-white border border-[#E5E4E2] text-[#1b1c1c] font-bold text-sm rounded-xl hover:bg-[#F0EDED] transition-all cursor-pointer"
+                >
+                  Create Classroom
+                </button>
+              </div>
+            </div>
+          )
         )}
 
         {currentView === 'subject-detail' && selectedSubject && (
@@ -465,21 +571,21 @@ export default function App() {
               handleNavigate('subject-detail', subject);
             }}
             onBack={handleGoBack}
-            onOpenAddSubject={() => {
-              const name = prompt('Enter new subject name (e.g. Cloud Computing):');
-              if (name) {
-                const code = prompt('Enter course code (e.g. CS307):') || 'CS307';
-                fetch('/api/subjects', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name, code, professor: 'Dr. Guest Faculty', description: `Curriculum and notes for ${name}` }),
+            onAddSubject={(subjectData) => {
+              fetch('/api/subjects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subjectData),
+              })
+                .then((res) => res.json())
+                .then((newSub) => {
+                  setSubjects((prev) => [...prev, newSub]);
+                  showToast(`Course "${newSub.name}" added successfully.`);
                 })
-                  .then((res) => res.json())
-                  .then((newSub) => {
-                    setSubjects([...subjects, newSub]);
-                    showToast(`Subject "${newSub.name}" added.`);
-                  });
-              }
+                .catch((err) => {
+                  console.error('Error adding subject:', err);
+                  showToast('Failed to add subject.');
+                });
             }}
           />
         )}
@@ -500,6 +606,7 @@ export default function App() {
           <ExamsScheduleView
             exams={exams}
             materials={materials}
+            currentUserRole={currentUser?.role || 'student'}
             onAddExam={handleAddExam}
             onToggleComplete={handleToggleExamComplete}
             onPreviewMaterial={(mat) => setPreviewMaterial(mat)}
@@ -522,6 +629,10 @@ export default function App() {
             members={members}
             classroom={activeClassroom}
             currentUserRole={currentUser?.role || 'student'}
+            currentUserId={currentUser?.id}
+            onAddMember={handleAddMember}
+            onUpdateRole={handleUpdateMemberRole}
+            onRemoveMember={handleRemoveMember}
             onBack={handleGoBack}
             onStartChat={(memberId) => {
               setNavHistory((prev) => [...prev, { view: currentView, subject: selectedSubject }]);
@@ -531,50 +642,86 @@ export default function App() {
           />
         )}
 
-        {currentView === 'chat' && activeClassroom && currentUser && (
-          <ChatView
-            currentUser={currentUser}
-            activeClassroomId={activeClassroom.id}
-            classMembers={members}
-            materials={materials}
-            onOpenDocumentReader={(mat) => setPreviewMaterial(mat)}
-            initialTargetUserId={initialChatTargetUserId}
-            onClearInitialTarget={() => setInitialChatTargetUserId(null)}
-            materialToForward={materialToForward}
-            onClearMaterialToForward={() => setMaterialToForward(null)}
-            onBack={handleGoBack}
-            onUpdateCurrentUser={(updated) => {
-              setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
-              setMembers((prev) =>
-                prev.map((m) =>
-                  m.id === currentUser?.id
-                    ? {
-                        ...m,
-                        name: updated.name || m.name,
-                        avatar: updated.avatar || m.avatar,
-                      }
-                    : m
-                )
-              );
-            }}
-            onUpdateFriendName={(friendId, newName) => {
-              setMembers((prev) =>
-                prev.map((m) => (m.id === friendId ? { ...m, name: newName } : m))
-              );
-            }}
-          />
+        {currentView === 'chat' && activeClassroom && (
+          currentUser ? (
+            <ChatView
+              currentUser={currentUser}
+              activeClassroomId={activeClassroom.id}
+              classMembers={members}
+              materials={materials}
+              onOpenDocumentReader={(mat) => setPreviewMaterial(mat)}
+              initialTargetUserId={initialChatTargetUserId}
+              onClearInitialTarget={() => setInitialChatTargetUserId(null)}
+              materialToForward={materialToForward}
+              onClearMaterialToForward={() => setMaterialToForward(null)}
+              onBack={handleGoBack}
+              onUpdateCurrentUser={(updated) => {
+                setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
+                setMembers((prev) =>
+                  prev.map((m) =>
+                    m.id === currentUser?.id
+                      ? {
+                          ...m,
+                          name: updated.name || m.name,
+                          avatar: updated.avatar || m.avatar,
+                        }
+                      : m
+                  )
+                );
+              }}
+              onUpdateFriendName={(friendId, newName) => {
+                setMembers((prev) =>
+                  prev.map((m) => (m.id === friendId ? { ...m, name: newName } : m))
+                );
+              }}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-16 p-8 bg-white border border-[#E5E4E2] rounded-3xl text-center shadow-md flex flex-col items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#d9e6dc] flex items-center justify-center text-[#56615a]">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <h2 className="text-2xl font-black text-[#1b1c1c]">Sign In Required</h2>
+              <p className="text-sm text-[#56615a]">
+                Please sign in with your institutional email and credentials to participate in your cohort chat.
+              </p>
+              <button
+                onClick={() => handleOpenAuth('login')}
+                className="px-6 py-3 bg-[#56615a] hover:bg-[#434d46] text-white font-bold text-sm rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                Sign In with Institutional ID
+              </button>
+            </div>
+          )
         )}
 
-        {currentView === 'profile' && currentUser && (
-          <ProfileView
-            user={currentUser}
-            classroom={activeClassroom}
-            materials={materials}
-            onPreviewMaterial={(mat) => setPreviewMaterial(mat)}
-            onOpenAuth={handleOpenAuth}
-            onSignOut={handleSignOut}
-            onBack={handleGoBack}
-          />
+        {currentView === 'profile' && (
+          currentUser ? (
+            <ProfileView
+              user={currentUser}
+              classroom={activeClassroom}
+              materials={materials}
+              onPreviewMaterial={(mat) => setPreviewMaterial(mat)}
+              onOpenAuth={handleOpenAuth}
+              onSignOut={handleSignOut}
+              onBack={handleGoBack}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-16 p-8 bg-white border border-[#E5E4E2] rounded-3xl text-center shadow-md flex flex-col items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#d9e6dc] flex items-center justify-center text-[#56615a]">
+                <UserCheck className="w-7 h-7" />
+              </div>
+              <h2 className="text-2xl font-black text-[#1b1c1c]">Member Profile</h2>
+              <p className="text-sm text-[#56615a]">
+                Sign in with your institutional account to view your uploaded notes, enrolled cohort stats, and academic contributions.
+              </p>
+              <button
+                onClick={() => handleOpenAuth('login')}
+                className="px-6 py-3 bg-[#56615a] hover:bg-[#434d46] text-white font-bold text-sm rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                Sign In with Institutional ID
+              </button>
+            </div>
+          )
         )}
       </div>
 
