@@ -102,17 +102,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (e?: React.FormEvent, customEmail?: string, customPass?: string) => {
+    if (e) e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
 
-    if (!loginEmail.trim()) {
+    const emailToUse = (customEmail !== undefined ? customEmail : loginEmail).trim();
+    const passToUse = (customPass !== undefined ? customPass : loginPassword).trim();
+
+    if (!emailToUse) {
       setErrorMessage('Please enter your Institutional Mail ID.');
       setLoading(false);
       return;
     }
-    if (!loginPassword.trim()) {
+    if (!passToUse) {
       setErrorMessage('Please enter your password.');
       setLoading(false);
       return;
@@ -123,8 +126,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: loginEmail.trim(),
-          password: loginPassword.trim(),
+          email: emailToUse,
+          password: passToUse,
         }),
       });
 
@@ -143,6 +146,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQuickDemoLogin = (email: string, pass: string) => {
+    setLoginEmail(email);
+    setLoginPassword(pass);
+    handleLoginSubmit(undefined, email, pass);
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
@@ -337,8 +346,122 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         )}
 
         {mode === 'login' ? (
-          /* Sign In Form with Institutional Mail & Password */
-          <form onSubmit={handleLoginSubmit} className="space-y-6">
+          <div className="space-y-6">
+            {/* Quick Demo Accounts Selection Box */}
+            <div className="bg-[#f0f4f1] border-2 border-[#b2beb5] rounded-3xl p-4 sm:p-5 shadow-xs">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#56615a] text-white flex items-center justify-center font-bold shadow-xs">
+                    <Sparkles className="w-4 h-4 text-[#d6e7a1]" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-extrabold text-[#1b1c1c] leading-tight flex items-center gap-2">
+                      <span>Quick Demo Accounts</span>
+                      <span className="text-[10px] font-bold bg-[#d6e7a1] text-[#3b4618] px-2 py-0.5 rounded-full uppercase">
+                        1-Click Access
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#56615a]">
+                      Click any demo persona to test all features with preloaded data
+                    </p>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-block text-[11px] font-mono bg-white px-2.5 py-1 rounded-full border border-[#b2beb5] text-[#56615a] font-bold">
+                  Pass: password123
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Account 1: Sarah Jenkins (Super Admin) */}
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('sarah.j@oxford.edu', 'password123')}
+                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
+                  title="Log in as Sarah Jenkins (Super Admin)"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#d9e6dc] text-[#2d312e] px-2 py-0.5 rounded-full border border-[#b2beb5]/80 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-[#56615a]" />
+                        <span>Super Admin</span>
+                      </span>
+                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
+                        →
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Sarah Jenkins</div>
+                    <div className="text-[11px] text-[#56615a] font-mono truncate">sarah.j@oxford.edu</div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
+                    <span>Full Admin Access</span>
+                    <span className="text-[#56615a] font-bold">Try →</span>
+                  </div>
+                </button>
+
+                {/* Account 2: Elena Rostova (Student) */}
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('elena.r@oxford.edu', 'password123')}
+                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
+                  title="Log in as Elena Rostova (Student)"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#d6e7a1]/60 text-[#404c1a] px-2 py-0.5 rounded-full border border-[#d6e7a1] flex items-center gap-1">
+                        <GraduationCap className="w-3 h-3 text-[#56642b]" />
+                        <span>Student</span>
+                      </span>
+                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
+                        →
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Elena Rostova</div>
+                    <div className="text-[11px] text-[#56615a] font-mono truncate">elena.r@oxford.edu</div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
+                    <span>Groups & DMs</span>
+                    <span className="text-[#56615a] font-bold">Try →</span>
+                  </div>
+                </button>
+
+                {/* Account 3: Michael Klein (Class Admin) */}
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('michael.k@oxford.edu', 'password123')}
+                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
+                  title="Log in as Michael Klein (Class Admin)"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#e0e3e5] text-[#2d312e] px-2 py-0.5 rounded-full border border-[#b2beb5]/80 flex items-center gap-1">
+                        <Award className="w-3 h-3 text-[#56615a]" />
+                        <span>Class Admin</span>
+                      </span>
+                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
+                        →
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Michael Klein</div>
+                    <div className="text-[11px] text-[#56615a] font-mono truncate">michael.k@oxford.edu</div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
+                    <span>Moderator & Notes</span>
+                    <span className="text-[#56615a] font-bold">Try →</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="relative flex items-center justify-center">
+              <div className="border-t border-[#D8D6D4] w-full"></div>
+              <span className="bg-white px-3 text-xs text-[#737874] font-semibold uppercase tracking-wider absolute">
+                Or Sign In Manually
+              </span>
+            </div>
+
+            {/* Sign In Form with Institutional Mail & Password */}
+            <form onSubmit={handleLoginSubmit} className="space-y-6">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
@@ -424,7 +547,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
             </div>
           </form>
-        ) : (
+        </div>
+      ) : (
           /* Sign Up Form with Name, Reg No, Department, Institutional Mail ID, and Password */
           <form onSubmit={handleSignupSubmit} className="space-y-6">
             <div className="bg-[#f7faf8] border-2 border-[#b2beb5] rounded-2xl p-4 flex items-start gap-3">
