@@ -413,6 +413,23 @@ export default function App() {
     }
   };
 
+  const handleBanMember = async (memberId: string, memberName?: string) => {
+    try {
+      const res = await fetch(`/api/members/${memberId}/ban`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to ban member.');
+      }
+      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      showToast(`Permanently banned ${memberName || 'member'} from cohort.`);
+    } catch (err: any) {
+      showToast(err.message || 'Error banning member.');
+      throw err;
+    }
+  };
+
   const handleToggleExamComplete = async (examId: string, currentCompleted?: boolean) => {
     const newStatus = !currentCompleted;
     try {
@@ -633,6 +650,7 @@ export default function App() {
             onAddMember={handleAddMember}
             onUpdateRole={handleUpdateMemberRole}
             onRemoveMember={handleRemoveMember}
+            onBanMember={handleBanMember}
             onBack={handleGoBack}
             onStartChat={(memberId) => {
               setNavHistory((prev) => [...prev, { view: currentView, subject: selectedSubject }]);
@@ -654,6 +672,8 @@ export default function App() {
               onClearInitialTarget={() => setInitialChatTargetUserId(null)}
               materialToForward={materialToForward}
               onClearMaterialToForward={() => setMaterialToForward(null)}
+              onRemoveCohortMember={handleRemoveMember}
+              onBanCohortMember={handleBanMember}
               onBack={handleGoBack}
               onUpdateCurrentUser={(updated) => {
                 setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));

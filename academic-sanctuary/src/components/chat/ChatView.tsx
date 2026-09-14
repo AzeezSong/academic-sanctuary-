@@ -47,6 +47,7 @@ import { ForwardMessageModal } from './ForwardMessageModal';
 import { EditProfileModal } from './EditProfileModal';
 import { EditFriendNameModal } from './EditFriendNameModal';
 import { ForwardMaterialMultiModal } from './ForwardMaterialMultiModal';
+import { MemberContextMenu, TargetMemberInfo } from './MemberContextMenu';
 
 interface ChatViewProps {
   currentUser: User;
@@ -60,6 +61,8 @@ interface ChatViewProps {
   onUpdateFriendName?: (friendId: string, newName: string) => void;
   materialToForward?: Material | null;
   onClearMaterialToForward?: () => void;
+  onRemoveCohortMember?: (memberId: string) => Promise<void> | void;
+  onBanCohortMember?: (memberId: string, memberName: string) => Promise<void> | void;
   onBack?: () => void;
 }
 
@@ -77,6 +80,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onUpdateFriendName,
   materialToForward,
   onClearMaterialToForward,
+  onRemoveCohortMember,
+  onBanCohortMember,
   onBack,
 }) => {
   // State: Conversations list & Active Conversation
@@ -112,6 +117,42 @@ export const ChatView: React.FC<ChatViewProps> = ({
     position: { x: 0, y: 0 },
     message: null,
   });
+
+  // WhatsApp-Style Right-Click Member Context Menu
+  const [memberContextMenuState, setMemberContextMenuState] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    member: TargetMemberInfo | null;
+  }>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    member: null,
+  });
+
+  const handleOpenMemberContextMenu = (
+    e: React.MouseEvent,
+    userId: string,
+    userName: string,
+    userAvatar?: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const groupMember = activeGroupDetails?.members.find((m) => m.userId === userId);
+    const classMember = classMembers.find((m) => m.id === userId);
+    setMemberContextMenuState({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      member: {
+        id: userId,
+        name: userName,
+        avatar: userAvatar || groupMember?.avatar || classMember?.avatar,
+        email: groupMember?.email || classMember?.email,
+        role: classMember?.role,
+        rollNumber: groupMember?.rollNumber || classMember?.rollNumber,
+        groupRole: groupMember?.role || 'member',
+      },
+    });
+  };
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const [isInChatSearchOpen, setIsInChatSearchOpen] = useState(false);
@@ -846,6 +887,43 @@ export const ChatView: React.FC<ChatViewProps> = ({
       method: 'DELETE',
     });
     fetchActiveConversation(activeGroupId);
+    showToast('Member removed from group.');
+  };
+
+  const handleBanGroupMember = async (userId: string, userName?: string) => {
+    if (!activeGroupId) return;
+    try {
+      const res = await fetch(`/api/chat/groups/${activeGroupId}/members/${userId}/ban`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        fetchActiveConversation(activeGroupId);
+        showToast(`Banned and removed ${userName || 'member'} from group.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to ban member from group.');
+      }
+    } catch (err) {
+      console.error('Failed to ban group member:', err);
+    }
+  };
+
+  const handleBanCohortMember = async (userId: string, userName?: string) => {
+    try {
+      const res = await fetch(`/api/members/${userId}/ban`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        showToast(`Permanently banned ${userName || 'member'} from cohort.`);
+        if (activeGroupId) fetchActiveConversation(activeGroupId);
+        fetchGroups();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to ban member from cohort.');
+      }
+    } catch (err) {
+      console.error('Failed to ban cohort member:', err);
+    }
   };
 
   const handleChangeRole = async (userId: string, newRole: 'admin' | 'member') => {
@@ -1430,7 +1508,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             <img
                               src={msg.senderAvatar}
                               alt={msg.senderName}
-                              className="w-7 h-7 rounded-full object-cover flex-shrink-0 mb-1 border border-[#E5E4E2]"
+                              onContextMenu={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                handleOpenMemberContextMenu(
+                                  e,
+                                  msg.senderId,
+                                  msg.senderName,
+                                  msg.senderAvatar
+                                );
+                              }}
+                              className="w-7 h-7 rounded-full object-cover flex-shrink-0 mb-1 border border-[#E5E4E2] cursor-pointer hover:ring-2 hover:ring-[#56615a]/40 transition-all select-none"
+                              title={`Right-click to moderate or message ${msg.senderName}`}
                               referrerPolicy="no-referrer"
                             />
                           )}
@@ -1463,7 +1552,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                             {/* Sender Name in Group Chat */}
                             {!isSelf && !activeGroup.isDirect && (
-                              <div className="text-xs md:text-[13px] font-bold text-[#56642b] mb-1.5 flex items-center justify-between">
+                              <div
+                                onContextMenu={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleOpenMemberContextMenu(
+                                    e,
+                                    msg.senderId,
+                                    msg.senderName,
+                                    msg.senderAvatar
+                                  );
+                                }}
+                                className="text-xs md:text-[13px] font-bold text-[#56642b] mb-1.5 flex items-center justify-between cursor-pointer hover:underline select-none"
+                                title={`Right-click to moderate or message ${msg.senderName}`}
+                              >
                                 <span>{msg.senderName}</span>
                               </div>
                             )}
@@ -1920,6 +2022,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           onUpdateGroup={handleUpdateGroup}
           onAddMembers={handleAddMembers}
           onRemoveMember={handleRemoveMember}
+          onBanMember={handleBanGroupMember}
+          onStartDirectChat={handleStartDirectChat}
           onChangeRole={handleChangeRole}
           onDeleteGroup={handleDeleteGroup}
           onLeaveGroup={handleLeaveGroup}
@@ -1941,6 +2045,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
         onPin={handleTogglePin}
         onStar={handleToggleStar}
         onDelete={(msg) => handleDeleteMessage(msg.id)}
+      />
+
+      {/* WhatsApp-Style Member Context Menu (Right-click on sender avatar/name or profile) */}
+      <MemberContextMenu
+        isOpen={memberContextMenuState.isOpen}
+        position={memberContextMenuState.position}
+        member={memberContextMenuState.member}
+        currentUser={currentUser}
+        contextType="both"
+        groupId={activeGroupId || undefined}
+        groupName={activeGroup?.name}
+        cohortName="Cohort"
+        isCohortAdmin={isCohortAdmin}
+        isGroupAdmin={(activeGroupDetails?.adminIds || []).includes(currentUser.id)}
+        onClose={() => setMemberContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+        onMessageUser={handleStartDirectChat}
+        onRemoveFromGroup={handleRemoveMember}
+        onBanFromGroup={handleBanGroupMember}
+        onRemoveFromCohort={onRemoveCohortMember}
+        onBanFromCohort={onBanCohortMember || handleBanCohortMember}
+        onToggleGroupRole={(memberId, currentRole) =>
+          handleChangeRole(memberId, currentRole === 'admin' ? 'member' : 'admin')
+        }
       />
 
       {/* WhatsApp Forward Message Modal */}

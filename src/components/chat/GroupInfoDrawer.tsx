@@ -20,7 +20,9 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Upload,
+  Ban,
 } from 'lucide-react';
+import { MemberContextMenu, TargetMemberInfo } from './MemberContextMenu';
 
 interface GroupInfoDrawerProps {
   isOpen: boolean;
@@ -33,11 +35,13 @@ interface GroupInfoDrawerProps {
   onUpdateGroup: (updates: { name?: string; avatar?: string; description?: string }) => Promise<void>;
   onAddMembers: (memberIds: string[]) => Promise<void>;
   onRemoveMember: (userId: string) => Promise<void>;
+  onBanMember?: (userId: string, memberName: string) => Promise<void>;
   onChangeRole: (userId: string, newRole: 'admin' | 'member') => Promise<void>;
   onDeleteGroup: () => Promise<void>;
   onLeaveGroup: () => Promise<void>;
   onOpenSearch?: () => void;
   onOpenDocumentReader?: (material: Material) => void;
+  onStartDirectChat?: (userId: string) => void;
   materials?: Material[];
 }
 
@@ -52,11 +56,13 @@ export const GroupInfoDrawer: React.FC<GroupInfoDrawerProps> = ({
   onUpdateGroup,
   onAddMembers,
   onRemoveMember,
+  onBanMember,
   onChangeRole,
   onDeleteGroup,
   onLeaveGroup,
   onOpenSearch,
   onOpenDocumentReader,
+  onStartDirectChat,
   materials = [],
 }) => {
   // Inline editing states
@@ -74,6 +80,34 @@ export const GroupInfoDrawer: React.FC<GroupInfoDrawerProps> = ({
   const [actionMenuUser, setActionMenuUser] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
+
+  // Right-Click Context Menu
+  const [contextMenuState, setContextMenuState] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    member: TargetMemberInfo | null;
+  }>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    member: null,
+  });
+
+  const handleMemberContextMenu = (e: React.MouseEvent, m: ChatGroupMember) => {
+    e.preventDefault();
+    setContextMenuState({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      member: {
+        id: m.userId,
+        name: m.name,
+        email: m.email,
+        avatar: m.avatar,
+        role: m.role,
+        rollNumber: m.rollNumber,
+        groupRole: m.role,
+      },
+    });
+  };
 
   // File input ref for changing group icon from files
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -510,7 +544,9 @@ export const GroupInfoDrawer: React.FC<GroupInfoDrawerProps> = ({
                   return (
                     <div
                       key={m.userId}
-                      className="py-2.5 first:pt-1 last:pb-1 flex items-center justify-between gap-2"
+                      onContextMenu={(e) => handleMemberContextMenu(e, m)}
+                      className="py-2.5 px-1.5 rounded-xl hover:bg-[#F9F6EE] transition-colors first:pt-1 last:pb-1 flex items-center justify-between gap-2 cursor-context-menu select-none group/member-row"
+                      title={isAdmin && !isSelf ? "Right-click for WhatsApp admin options (Remove, Ban, Message)" : undefined}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="relative flex-shrink-0">
@@ -603,6 +639,24 @@ export const GroupInfoDrawer: React.FC<GroupInfoDrawerProps> = ({
                                 >
                                   <UserMinus className="w-4 h-4" /> Remove from Group
                                 </button>
+
+                                {onBanMember && (
+                                  <button
+                                    onClick={(e) => {
+                                      setActionMenuUser(null);
+                                      handleMemberContextMenu(e, m);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-black text-red-600 hover:bg-red-100/70 flex items-center justify-between gap-2 border-t border-[#F0EDED] cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <Ban className="w-4 h-4" />
+                                      <span>Remove & Ban</span>
+                                    </div>
+                                    <span className="text-[9px] font-black uppercase bg-[#ffdad6] text-[#ba1a1a] px-1.5 py-0.2 rounded">
+                                      Ban
+                                    </span>
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -740,6 +794,32 @@ export const GroupInfoDrawer: React.FC<GroupInfoDrawerProps> = ({
           </div>
         )}
       </div>
+
+      {/* WhatsApp Member Context Menu */}
+      <MemberContextMenu
+        isOpen={contextMenuState.isOpen}
+        position={contextMenuState.position}
+        member={contextMenuState.member}
+        currentUser={{
+          id: currentUserId,
+          name: 'You',
+          email: '',
+          role: 'student',
+          avatar: '',
+        }}
+        contextType="group"
+        groupId={group.id}
+        groupName={group.name}
+        isCohortAdmin={false}
+        isGroupAdmin={isAdmin}
+        onClose={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+        onMessageUser={onStartDirectChat}
+        onRemoveFromGroup={onRemoveMember}
+        onBanFromGroup={onBanMember}
+        onToggleGroupRole={(memberId, currentRole) =>
+          onChangeRole(memberId, currentRole === 'admin' ? 'member' : 'admin')
+        }
+      />
     </div>
   );
 };

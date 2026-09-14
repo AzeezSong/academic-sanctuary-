@@ -1419,6 +1419,89 @@ app.delete('/api/members/:id', (req, res) => {
   res.json({ success: true, member: removed });
 });
 
+// Banned Cohort Users Store
+let bannedCohortUsers: {
+  classroomId: string;
+  userId: string;
+  email: string;
+  name: string;
+  rollNumber?: string;
+  bannedAt: string;
+  bannedBy: string;
+}[] = [];
+
+// Ban and Remove Member from Cohort
+app.post('/api/members/:id/ban', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  if (activeUser.role !== 'super_admin' && activeUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Only cohort administrators can ban members.' });
+  }
+
+  const { id } = req.params;
+  if (id === activeUser.id) {
+    return res.status(400).json({ error: 'You cannot ban yourself from the cohort.' });
+  }
+
+  const index = members.findIndex((m) => m.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Member not found.' });
+  }
+
+  if (members[index].role === 'super_admin') {
+    return res.status(403).json({ error: 'Cannot ban the Super Admin.' });
+  }
+
+  const memberToBan = members.splice(index, 1)[0];
+
+  // Remove from registeredUsers so direct credentials won't log into this cohort
+  const regIdx = registeredUsers.findIndex((u) => u.id === id);
+  if (regIdx !== -1) {
+    registeredUsers.splice(regIdx, 1);
+  }
+
+  // Record into banned cohort list
+  bannedCohortUsers.push({
+    classroomId: memberToBan.classroomId || '',
+    userId: memberToBan.id,
+    email: memberToBan.email.toLowerCase(),
+    name: memberToBan.name,
+    rollNumber: memberToBan.rollNumber,
+    bannedAt: new Date().toISOString(),
+    bannedBy: activeUser.name,
+  });
+
+  // Decrement classroom count
+  const cls = classrooms.find((c) => c.id === memberToBan.classroomId);
+  if (cls && cls.memberCount > 1) {
+    cls.memberCount -= 1;
+  }
+
+  // Also remove from all chat groups in this classroom
+  const affectedGroups = chatGroups.filter((g) => g.classroomId === memberToBan.classroomId);
+  for (const grp of affectedGroups) {
+    chatGroupMembers = chatGroupMembers.filter(
+      (m) => !(m.groupId === grp.id && m.userId === id)
+    );
+    if (!grp.bannedUserIds) grp.bannedUserIds = [];
+    if (!grp.bannedUserIds.includes(id)) grp.bannedUserIds.push(id);
+
+    broadcastToGroup(grp.id, {
+      type: 'chat:member_banned',
+      groupId: grp.id,
+      userId: id,
+      bannedBy: activeUser.name,
+    });
+  }
+
+  res.json({ success: true, banned: true, member: memberToBan });
+});
+
+// Get Banned Cohort Members
+app.get('/api/classrooms/:id/banned', (req, res) => {
+  const list = bannedCohortUsers.filter((b) => b.classroomId === req.params.id);
+  res.json(list);
+});
+
 // ==========================================
 // WHATSAPP-STYLE CHAT SYSTEM (Groups, DMs, Messages, Real-Time WS)
 // ==========================================
@@ -1441,6 +1524,7 @@ interface ChatGroupRecord {
   createdAt: string;
   updatedAt: string;
   pinnedMessageId?: string;
+  bannedUserIds?: string[];
 }
 
 interface ChatMessageRecord {
@@ -2259,6 +2343,61 @@ app.delete('/api/chat/groups/:id/members/:userId', (req, res) => {
   });
 
   res.json({ success: true });
+});
+
+// Ban and Remove Member from Chat Group (Admin only)
+app.post('/api/chat/groups/:id/members/:userId/ban', (req, res) => {
+  const activeUser = getCurrentOrReqUser(req);
+  const group = chatGroups.find((g) => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+
+  const targetUserId = req.params.userId;
+  if (targetUserId === activeUser.id) {
+    return res.status(400).json({ error: 'You cannot ban yourself from the group.' });
+  }
+
+  const callerMember = chatGroupMembers.find(
+    (m) => m.groupId === group.id && m.userId === activeUser.id
+  );
+  const isCohortAdmin = activeUser.role === 'super_admin' || activeUser.role === 'admin';
+  const isGroupAdmin = callerMember && callerMember.role === 'admin';
+
+  if (!isCohortAdmin && !isGroupAdmin) {
+    return res.status(403).json({ error: 'Only group administrators can ban members from this group' });
+  }
+
+  // Check if target is super admin
+  const targetMember = members.find((m) => m.id === targetUserId);
+  if (targetMember && targetMember.role === 'super_admin') {
+    return res.status(403).json({ error: 'Cannot ban the Super Admin.' });
+  }
+
+  // Remove member from group
+  chatGroupMembers = chatGroupMembers.filter(
+    (m) => !(m.groupId === group.id && m.userId === targetUserId)
+  );
+
+  // Add to group banned list
+  if (!group.bannedUserIds) group.bannedUserIds = [];
+  if (!group.bannedUserIds.includes(targetUserId)) {
+    group.bannedUserIds.push(targetUserId);
+  }
+
+  broadcastToGroup(group.id, {
+    type: 'chat:member_banned',
+    groupId: group.id,
+    userId: targetUserId,
+    bannedBy: activeUser.name,
+  });
+
+  res.json({ success: true, banned: true, userId: targetUserId });
+});
+
+// Get Banned Group Members
+app.get('/api/chat/groups/:id/banned', (req, res) => {
+  const group = chatGroups.find((g) => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  res.json(group.bannedUserIds || []);
 });
 
 // 9. Promote or Demote Member Role (Admin only)

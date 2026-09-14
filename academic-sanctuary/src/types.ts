@@ -195,4 +195,5 @@ export interface ChatGroup {
     type?: ChatMessageType;
   };
   unreadCount?: number;
+  bannedUserIds?: string[];
 }

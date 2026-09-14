@@ -16,7 +16,9 @@ import {
   X,
   Trash2,
   AlertCircle,
+  Ban,
 } from 'lucide-react';
+import { MemberContextMenu, TargetMemberInfo } from './chat/MemberContextMenu';
 
 interface MembersDirectoryViewProps {
   members: Member[];
@@ -32,6 +34,7 @@ interface MembersDirectoryViewProps {
   }) => Promise<void> | void;
   onUpdateRole?: (memberId: string, newRole: UserRole) => Promise<void> | void;
   onRemoveMember?: (memberId: string) => Promise<void> | void;
+  onBanMember?: (memberId: string, memberName: string) => Promise<void> | void;
   onStartChat?: (memberId: string) => void;
   onBack?: () => void;
 }
@@ -44,6 +47,7 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
   onAddMember,
   onUpdateRole,
   onRemoveMember,
+  onBanMember,
   onStartChat,
   onBack,
 }) => {
@@ -57,6 +61,33 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // WhatsApp-style Right-Click Member Context Menu
+  const [contextMenuState, setContextMenuState] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    member: TargetMemberInfo | null;
+  }>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    member: null,
+  });
+
+  const handleMemberContextMenu = (e: React.MouseEvent, m: Member) => {
+    e.preventDefault();
+    setContextMenuState({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      member: {
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        avatar: m.avatar,
+        role: m.role,
+        rollNumber: m.rollNumber,
+      },
+    });
+  };
 
   const isAdmin = currentUserRole === 'super_admin' || currentUserRole === 'admin';
 
@@ -208,7 +239,7 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
       </div>
 
       {/* Search and stats */}
-      <div className="bg-white border border-[#E5E4E2] rounded-2xl p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-xs">
+      <div className="bg-white border border-[#E5E4E2] rounded-2xl p-4 mb-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-xs">
         <div className="flex items-center gap-2 text-xs font-semibold text-[#434844]">
           <Users className="w-4 h-4 text-[#56615a]" />
           <span>
@@ -231,6 +262,21 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
           />
         </div>
       </div>
+
+      {/* WhatsApp Right-Click Tip Banner */}
+      {isAdmin && (
+        <div className="mb-6 px-4 py-2.5 bg-[#f0f4f1] border border-[#b2beb5] rounded-2xl flex items-center justify-between text-xs text-[#2d312e] shadow-2xs">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="w-2 h-2 rounded-full bg-[#56615a] animate-pulse"></span>
+            <span>
+              <strong>WhatsApp-Style Moderation:</strong> Right-click on any member card or profile to access <strong>Remove</strong> and <strong>Remove & Ban</strong> options.
+            </span>
+          </div>
+          <span className="hidden sm:inline-block text-[10px] font-mono font-bold bg-white text-[#56615a] px-2 py-0.5 rounded-md border border-[#c3d1c7]">
+            Right Click
+          </span>
+        </div>
+      )}
 
       {/* Members List */}
       {filtered.length === 0 ? (
@@ -264,10 +310,15 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
             return (
               <div
                 key={member.id}
-                className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#F9F6EE] transition-colors"
+                onContextMenu={(e) => handleMemberContextMenu(e, member)}
+                className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#F9F6EE] transition-colors cursor-context-menu group/row select-none"
+                title={isAdmin && !isSelf ? `Right-click for WhatsApp-style moderation options (Remove, Ban, Message ${member.name})` : undefined}
               >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-full bg-[#E4E2E1] border border-[#C3C8C3] overflow-hidden flex-shrink-0">
+                <div 
+                  className="flex items-center gap-3.5 cursor-pointer"
+                  onContextMenu={(e) => handleMemberContextMenu(e, member)}
+                >
+                  <div className="w-11 h-11 rounded-full bg-[#E4E2E1] border border-[#C3C8C3] overflow-hidden flex-shrink-0 relative">
                     <img
                       src={member.avatar}
                       alt={member.name}
@@ -338,6 +389,18 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
                       title={`Remove ${member.name} from cohort`}
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Remove and Ban Member Button (Admin only) */}
+                  {canManageRole && onBanMember && (
+                    <button
+                      onClick={(e) => handleMemberContextMenu(e, member)}
+                      disabled={actionLoadingId === member.id}
+                      className="p-1.5 text-[#737874] hover:text-[#ba1a1a] hover:bg-red-100 rounded-xl transition-colors cursor-pointer"
+                      title={`Remove and Ban ${member.name} from cohort (or right-click)`}
+                    >
+                      <Ban className="w-4 h-4 text-[#ba1a1a]" />
                     </button>
                   )}
 
@@ -500,6 +563,32 @@ export const MembersDirectoryView: React.FC<MembersDirectoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* WhatsApp-Style Right-Click Member Context Menu */}
+      <MemberContextMenu
+        isOpen={contextMenuState.isOpen}
+        position={contextMenuState.position}
+        member={contextMenuState.member}
+        currentUser={{
+          id: currentUserId || '',
+          name: 'You',
+          email: '',
+          role: currentUserRole,
+          avatar: '',
+        }}
+        contextType="cohort"
+        cohortName={classroom.name}
+        isCohortAdmin={isAdmin}
+        isGroupAdmin={false}
+        onClose={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+        onMessageUser={onStartChat}
+        onRemoveFromCohort={onRemoveMember}
+        onBanFromCohort={onBanMember}
+        onToggleCohortRole={(memberId) => {
+          const mem = members.find((m) => m.id === memberId);
+          if (mem) handleToggleRole(mem);
+        }}
+      />
     </main>
   );
 };
