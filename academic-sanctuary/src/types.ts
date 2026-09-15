@@ -15,6 +15,16 @@ export interface User {
   department: string;
   rollNumber?: string;
   classroomId?: string;
+  classCode?: string;
+  registrationNumber?: string;
+}
+
+export interface Profile {
+  id: string;
+  full_name: string;
+  class_code?: string | null;
+  registration_number?: string | null;
+  created_at?: string;
 }
 
 export interface Classroom {

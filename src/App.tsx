@@ -16,6 +16,7 @@ import { DocumentReaderModal } from './components/DocumentReaderModal';
 import { JoinClassroomModal } from './components/JoinClassroomModal';
 import { AuthModal } from './components/AuthModal';
 import { ChatView } from './components/chat/ChatView';
+import { supabase } from './lib/supabase';
 import { MessageSquare, UserCheck, School } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -47,7 +48,7 @@ export default function App() {
 
   // Auth Modal state
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup' | 'forgot-password' | 'reset-password'>('login');
 
   // Modals state
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -126,53 +127,146 @@ export default function App() {
     }
   };
 
-  // Fetch initial data from Express backend
-  useEffect(() => {
-    const fetchData = async () => {
+  // Helper to load Supabase User and match their classroom
+  const loadSupabaseUser = async (sbUser: any, currentClassrooms: Classroom[]) => {
+    try {
+      let profile: any = null;
       try {
-        const [clsRes, authMeRes] = await Promise.all([
-          fetch('/api/classrooms'),
-          fetch('/api/auth/me'),
-        ]);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', sbUser.id)
+          .maybeSingle();
+        if (!error && data) {
+          profile = data;
+        }
+      } catch (e) {
+        console.warn('Could not query profiles table:', e);
+      }
 
-        let initialClassroom: Classroom | null = null;
+      const resolvedName =
+        profile?.full_name ||
+        sbUser.user_metadata?.full_name ||
+        sbUser.email?.split('@')[0] ||
+        'Student';
 
+      const resolvedClassCode =
+        profile?.class_code ||
+        sbUser.user_metadata?.class_code ||
+        '';
+
+      const resolvedRegNo =
+        profile?.registration_number ||
+        sbUser.user_metadata?.registration_number ||
+        '';
+
+      let matchedCls = currentClassrooms.find(
+        (c) => c.code.toLowerCase() === resolvedClassCode.toLowerCase()
+      );
+
+      if (!matchedCls && resolvedClassCode) {
+        matchedCls = {
+          id: `cls-${resolvedClassCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+          code: resolvedClassCode.toUpperCase(),
+          name: `Classroom Cohort ${resolvedClassCode.toUpperCase()}`,
+          collegeName: 'Academic Sanctuary',
+          location: 'Main Campus',
+          department: 'Engineering & Sciences',
+          course: 'Academic Cohort',
+          degreeLevel: 'undergraduate',
+          batchYear: '2026',
+          section: 'A',
+          semester: 'Semester 1',
+          superAdminId: sbUser.id,
+          memberCount: 1,
+          createdAt: new Date().toISOString(),
+        };
+        setClassrooms((prev) => [matchedCls!, ...prev.filter((c) => c.id !== matchedCls!.id)]);
+      }
+
+      const appUser: User = {
+        id: sbUser.id,
+        name: resolvedName,
+        email: sbUser.email || '',
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(sbUser.id)}`,
+        role: 'student',
+        department: 'Academic Sanctuary',
+        rollNumber: resolvedRegNo,
+        classCode: resolvedClassCode,
+        registrationNumber: resolvedRegNo,
+        classroomId: matchedCls?.id,
+      };
+
+      setCurrentUser(appUser);
+      if (matchedCls) {
+        setActiveClassroom(matchedCls);
+        loadClassroomData(matchedCls.id);
+      }
+    } catch (err) {
+      console.error('Error loading Supabase user profile:', err);
+    }
+  };
+
+  // Fetch initial data and restore Supabase authentication session
+  useEffect(() => {
+    let loadedClassrooms: Classroom[] = [];
+
+    const initializeApp = async () => {
+      try {
+        const clsRes = await fetch('/api/classrooms');
         if (clsRes.ok) {
-          const clsData = await clsRes.json();
-          setClassrooms(clsData);
-          if (clsData.length > 0) {
-            initialClassroom = clsData[0];
-            setActiveClassroom(clsData[0]);
+          loadedClassrooms = await clsRes.json();
+          setClassrooms(loadedClassrooms);
+          if (loadedClassrooms.length > 0) {
+            setActiveClassroom(loadedClassrooms[0]);
+            loadClassroomData(loadedClassrooms[0].id);
           }
-        }
-
-        if (authMeRes.ok) {
-          const authData = await authMeRes.json();
-          if (authData.user) {
-            setCurrentUser(authData.user);
-          }
-          if (authData.classroom) {
-            initialClassroom = authData.classroom;
-            setActiveClassroom(authData.classroom);
-          }
-        }
-
-        if (initialClassroom) {
-          loadClassroomData(initialClassroom.id);
         }
       } catch (err) {
-        console.error('Failed to load initial data from server:', err);
+        console.error('Failed to load initial classrooms from server:', err);
+      }
+
+      // Check URL for recovery link (password reset from email)
+      if (window.location.hash.includes('type=recovery') || window.location.hash.includes('reset-password')) {
+        setAuthInitialMode('reset-password');
+        setIsAuthOpen(true);
+      }
+
+      // Restore active Supabase session
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await loadSupabaseUser(session.user, loadedClassrooms);
+        }
+      } catch (err) {
+        console.error('Error restoring Supabase session:', err);
       }
     };
 
-    fetchData();
+    initializeApp();
+
+    // Listen for Supabase auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthInitialMode('reset-password');
+        setIsAuthOpen(true);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        await loadSupabaseUser(session.user, loadedClassrooms);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Handlers
   const handleNavigate = (view: string, data?: any) => {
     if (view === currentView && (!data || data?.id === selectedSubject?.id)) return;
     if ((view === 'chat' || view === 'profile') && !currentUser) {
-      showToast('Please sign in with your institutional credentials to access ' + (view === 'chat' ? 'cohort chat.' : 'your profile.'));
+      showToast('Please sign in with your email and password to access ' + (view === 'chat' ? 'cohort chat.' : 'your profile.'));
       handleOpenAuth('login');
       return;
     }
@@ -206,7 +300,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenAuth = (mode: 'login' | 'signup' = 'login') => {
+  const handleOpenAuth = (mode: 'login' | 'signup' | 'forgot-password' | 'reset-password' = 'login') => {
     setAuthInitialMode(mode);
     setIsAuthOpen(true);
   };
@@ -224,9 +318,11 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
+      await supabase.auth.signOut();
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {}
-    showToast('Signed out. Returned to sanctuary landing.');
+    setCurrentUser(null);
+    showToast('Signed out successfully. Returned to sanctuary landing.');
     setCurrentView('landing');
   };
 
@@ -732,13 +828,13 @@ export default function App() {
               </div>
               <h2 className="text-2xl font-black text-[#1b1c1c]">Member Profile</h2>
               <p className="text-sm text-[#56615a]">
-                Sign in with your institutional account to view your uploaded notes, enrolled cohort stats, and academic contributions.
+                Sign in to your account to view your uploaded notes, enrolled cohort stats, and academic contributions.
               </p>
               <button
                 onClick={() => handleOpenAuth('login')}
                 className="px-6 py-3 bg-[#56615a] hover:bg-[#434d46] text-white font-bold text-sm rounded-xl transition-all shadow-sm cursor-pointer"
               >
-                Sign In with Institutional ID
+                Sign In to Your Account
               </button>
             </div>
           )

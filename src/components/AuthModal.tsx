@@ -1,32 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { User, Classroom } from '../types';
+import { supabase } from '../lib/supabase';
 import {
   X,
   LogIn,
   UserPlus,
-  ShieldCheck,
-  GraduationCap,
-  Sparkles,
   School,
   Lock,
   Mail,
   User as UserIcon,
-  BookOpen,
-  ArrowRight,
-  ArrowLeft,
   Eye,
   EyeOff,
   Check,
   KeyRound,
   Info,
   Award,
+  GraduationCap,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialMode?: 'login' | 'signup';
+  initialMode?: 'login' | 'signup' | 'forgot-password' | 'reset-password';
   onAuthSuccess: (user: User, classroom: Classroom, message: string) => void;
   classrooms: Classroom[];
 }
@@ -38,203 +38,398 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onAuthSuccess,
   classrooms,
 }) => {
-  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot-password' | 'reset-password'>(initialMode);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
 
-  // Login form state (Institutional Mail & Password)
+  // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Signup form state (Name, Reg No, Department, Institutional Mail ID, Password)
-  const [signupName, setSignupName] = useState('');
-  const [signupRegNo, setSignupRegNo] = useState('');
-  const [signupDepartment, setSignupDepartment] = useState('');
+  // Sign Up form state (6 required fields)
+  const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
-  
-  // Single classroom enrollment choice
-  const [enrollmentMode, setEnrollmentMode] = useState<'code' | 'select' | 'create'>('code');
-  const [classroomCode, setClassroomCode] = useState('');
-  const [selectedClassroomId, setSelectedClassroomId] = useState(classrooms[0]?.id || '');
-  
-  // New classroom state if creating during signup
-  const [newCourseName, setNewCourseName] = useState('');
-  const [newCollegeName, setNewCollegeName] = useState('');
-  const [newBatchYear, setNewBatchYear] = useState('');
-  const [newSection, setNewSection] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [classCode, setClassCode] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
 
-  // Helper to check institutional email domain
-  const isInstitutionalDomain = (email: string) => {
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed.includes('@')) return false;
-    const domain = trimmed.split('@')[1] || '';
-    return (
-      domain.endsWith('.edu') ||
-      domain.includes('.edu.') ||
-      domain.endsWith('.ac') ||
-      domain.includes('.ac.') ||
-      domain.endsWith('.org') ||
-      domain.includes('oxford') ||
-      domain.includes('stanford') ||
-      domain.includes('harvard') ||
-      domain.includes('mit') ||
-      domain.includes('cambridge') ||
-      domain.includes('univ') ||
-      domain.includes('college')
-    );
-  };
-
-  const popularDepartments = [
-    'Computer Science & Engineering',
-    'Information Technology',
-    'Electrical & Electronics Eng.',
-    'Mechanical Engineering',
-    'Data Science & AI',
-    'Electronics & Comm. Eng.',
-  ];
+  // Forgot password & Reset password form state
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   useEffect(() => {
     setMode(initialMode);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setEmailConfirmationSent(false);
   }, [initialMode, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleLoginSubmit = async (e?: React.FormEvent, customEmail?: string, customPass?: string) => {
-    if (e) e.preventDefault();
+  // Password strength calculation
+  const getPasswordStrength = (pass: string) => {
+    const hasMinLength = pass.length >= 8;
+    const hasUppercase = /[A-Z]/.test(pass);
+    const hasLowercase = /[a-z]/.test(pass);
+    const hasNumber = /[0-9]/.test(pass);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pass);
+
+    const score = [hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSpecial].filter(Boolean).length;
+    return {
+      score,
+      hasMinLength,
+      hasUppercase,
+      hasLowercase,
+      hasNumber,
+      hasSpecial,
+      isStrong: score >= 4 && hasMinLength,
+    };
+  };
+
+  const passwordStrength = getPasswordStrength(signupPassword);
+  const newPasswordStrength = getPasswordStrength(newPassword);
+
+  // Helper to map Supabase User & Profile to application User object
+  const buildAppUser = async (supabaseUser: any, fallbackProfile?: any): Promise<{ user: User; classroom: Classroom }> => {
+    let profileData: any = fallbackProfile || null;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        profileData = data;
+      }
+    } catch (e) {
+      console.warn('Could not query profiles table directly:', e);
+    }
+
+    const resolvedName =
+      profileData?.full_name ||
+      supabaseUser.user_metadata?.full_name ||
+      supabaseUser.email?.split('@')[0] ||
+      'Student';
+
+    const resolvedClassCode =
+      profileData?.class_code ||
+      supabaseUser.user_metadata?.class_code ||
+      classCode ||
+      'DEFAULT';
+
+    const resolvedRegNo =
+      profileData?.registration_number ||
+      supabaseUser.user_metadata?.registration_number ||
+      registrationNumber ||
+      '';
+
+    // Match or create fallback classroom cohort
+    const matched = classrooms.find(
+      (c) => c.code.trim().toLowerCase() === resolvedClassCode.trim().toLowerCase()
+    );
+
+    const fallbackClassroom: Classroom = matched || {
+      id: `cls-${resolvedClassCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'general'}`,
+      code: resolvedClassCode.toUpperCase(),
+      name: `Classroom Cohort ${resolvedClassCode.toUpperCase()}`,
+      collegeName: 'Academic Sanctuary',
+      location: 'Main Campus',
+      department: 'Engineering & Sciences',
+      course: 'Academic Cohort',
+      degreeLevel: 'undergraduate',
+      batchYear: '2026',
+      section: 'A',
+      semester: 'Semester 1',
+      superAdminId: supabaseUser.id,
+      memberCount: 1,
+      createdAt: new Date().toISOString(),
+    };
+
+    const appUser: User = {
+      id: supabaseUser.id,
+      name: resolvedName,
+      email: supabaseUser.email || '',
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(supabaseUser.id)}`,
+      role: 'student',
+      department: 'Academic Sanctuary',
+      rollNumber: resolvedRegNo,
+      classCode: resolvedClassCode,
+      registrationNumber: resolvedRegNo,
+      classroomId: fallbackClassroom.id,
+    };
+
+    return { user: appUser, classroom: fallbackClassroom };
+  };
+
+  // 1. Handle Login
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
-    const emailToUse = (customEmail !== undefined ? customEmail : loginEmail).trim();
-    const passToUse = (customPass !== undefined ? customPass : loginPassword).trim();
+    const email = loginEmail.trim();
+    const password = loginPassword;
 
-    if (!emailToUse) {
-      setErrorMessage('Please enter your Institutional Mail ID.');
+    if (!email) {
+      setErrorMessage('Please enter your email address.');
       setLoading(false);
       return;
     }
-    if (!passToUse) {
+    if (!password) {
       setErrorMessage('Please enter your password.');
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailToUse,
-          password: passToUse,
-        }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Login failed. Please check your credentials.');
+      if (error) {
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMessage('Invalid email or password. Please verify your credentials and try again.');
+        } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          setErrorMessage('Your email address has not been confirmed yet. Please check your inbox for the confirmation link.');
+        } else {
+          setErrorMessage(error.message);
+        }
         setLoading(false);
         return;
       }
 
-      confetti({ particleCount: 40, spread: 60 });
-      onAuthSuccess(data.user, data.classroom, data.message || 'Logged in successfully!');
-      onClose();
+      if (data.user) {
+        confetti({ particleCount: 50, spread: 60 });
+        const { user: appUser, classroom: appClassroom } = await buildAppUser(data.user);
+        onAuthSuccess(appUser, appClassroom, 'Signed in successfully with Supabase Auth!');
+        onClose();
+      }
     } catch (err: any) {
-      setErrorMessage('Network error occurred. Please try again.');
+      setErrorMessage(err.message || 'An unexpected error occurred during login.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickDemoLogin = (email: string, pass: string) => {
-    setLoginEmail(email);
-    setLoginPassword(pass);
-    handleLoginSubmit(undefined, email, pass);
-  };
-
+  // 2. Handle Sign Up
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setEmailConfirmationSent(false);
 
-    // Strict validation of the 5 required fields
-    if (!signupName.trim()) {
+    // Strict validation of the 6 required fields
+    if (!fullName.trim()) {
       setErrorMessage('Please enter your Full Name.');
       setLoading(false);
       return;
     }
-    if (!signupRegNo.trim()) {
-      setErrorMessage('Please enter your Registration Number (Reg No).');
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!signupEmail.trim() || !emailPattern.test(signupEmail.trim())) {
+      setErrorMessage('Please enter a valid email address (e.g., student@university.edu).');
       setLoading(false);
       return;
     }
-    if (!signupDepartment.trim()) {
-      setErrorMessage('Please provide your Department.');
+
+    if (!classCode.trim()) {
+      setErrorMessage('Please enter your Class Code.');
       setLoading(false);
       return;
     }
-    if (!signupEmail.trim() || !signupEmail.includes('@')) {
-      setErrorMessage('Please enter a valid Institutional Mail ID.');
+
+    if (!registrationNumber.trim()) {
+      setErrorMessage('Please enter your Registration Number.');
       setLoading(false);
       return;
     }
-    if (!signupPassword.trim()) {
-      setErrorMessage('Please enter your institutional mail password (the password given by your institution for your mail).');
+
+    // Strong password enforcement
+    if (signupPassword.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
       setLoading(false);
       return;
     }
-    if (signupPassword.trim().length < 6) {
-      setErrorMessage('Institutional mail password must be at least 6 characters long.');
+
+    if (!passwordStrength.isStrong) {
+      setErrorMessage('Please choose a stronger password matching the security criteria below.');
+      setLoading(false);
+      return;
+    }
+
+    // Password confirmation match
+    if (signupPassword !== confirmPassword) {
+      setErrorMessage('Passwords do not match. Please re-enter to confirm.');
       setLoading(false);
       return;
     }
 
     try {
-      const payload: any = {
-        name: signupName.trim(),
-        regNo: signupRegNo.trim(),
-        rollNumber: signupRegNo.trim(),
-        department: signupDepartment.trim(),
-        email: signupEmail.trim().toLowerCase(),
-        password: signupPassword.trim(),
-        classroomOption: enrollmentMode === 'create' ? 'create' : enrollmentMode === 'code' ? 'join' : 'select',
-      };
+      const trimmedEmail = signupEmail.trim().toLowerCase();
+      const trimmedFullName = fullName.trim();
+      const trimmedClassCode = classCode.trim().toUpperCase();
+      const trimmedRegNo = registrationNumber.trim().toUpperCase();
 
-      if (enrollmentMode === 'code') {
-        payload.classroomCode = classroomCode.trim();
-      } else if (enrollmentMode === 'select') {
-        payload.classroomId = selectedClassroomId;
-      } else if (enrollmentMode === 'create') {
-        payload.newClassroomData = {
-          course: newCourseName,
-          collegeName: newCollegeName,
-          department: signupDepartment,
-          batchYear: newBatchYear,
-          section: newSection,
-          selectedSubjects: [],
-        };
-      }
-
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      // Register user through Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password: signupPassword,
+        options: {
+          data: {
+            full_name: trimmedFullName,
+            class_code: trimmedClassCode,
+            registration_number: trimmedRegNo,
+          },
+        },
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Failed to create account.');
+      if (error) {
+        if (error.message.toLowerCase().includes('already registered')) {
+          setErrorMessage('An account with this email already exists. Please sign in instead.');
+        } else {
+          setErrorMessage(error.message);
+        }
         setLoading(false);
         return;
       }
 
-      confetti({ particleCount: 60, spread: 70 });
-      onAuthSuccess(data.user, data.classroom, data.message || 'Account created successfully!');
-      onClose();
-    } catch (err) {
-      setErrorMessage('Network error. Please try again.');
+      // If user was created, also ensure profile is saved to public profiles table
+      if (data.user) {
+        try {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              full_name: trimmedFullName,
+              class_code: trimmedClassCode,
+              registration_number: trimmedRegNo,
+            });
+
+          if (profileError) {
+            console.warn('Note: Profile upsert returned:', profileError.message);
+          }
+        } catch (pe) {
+          console.warn('Note: Error saving profile to profiles table:', pe);
+        }
+
+        // Check if email confirmation is required by Supabase
+        if (!data.session) {
+          setEmailConfirmationSent(true);
+          setSuccessMessage(
+            `Registration successful! A confirmation email has been sent to ${trimmedEmail}. Please check your inbox and verify your email to log in.`
+          );
+          setLoading(false);
+          return;
+        }
+
+        // If email confirmation is disabled or immediate session returned
+        confetti({ particleCount: 70, spread: 80 });
+        const { user: appUser, classroom: appClassroom } = await buildAppUser(data.user, {
+          id: data.user.id,
+          full_name: trimmedFullName,
+          class_code: trimmedClassCode,
+          registration_number: trimmedRegNo,
+        });
+
+        onAuthSuccess(appUser, appClassroom, 'Account created and authenticated successfully!');
+        onClose();
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred during registration.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Handle Forgot Password
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const email = resetEmail.trim();
+    if (!email) {
+      setErrorMessage('Please enter your registered email address.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const redirectUrl = `${window.location.origin}`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccessMessage(`Password reset link sent to ${email}. Please check your inbox and follow the instructions.`);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send password reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. Handle Reset Password (Setting New Password)
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (newPassword.length < 8) {
+      setErrorMessage('New password must be at least 8 characters long.');
+      setLoading(false);
+      return;
+    }
+
+    if (!newPasswordStrength.isStrong) {
+      setErrorMessage('Please choose a stronger password matching the criteria.');
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setErrorMessage('Passwords do not match. Please re-enter to confirm.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        confetti({ particleCount: 50, spread: 60 });
+        const { user: appUser, classroom: appClassroom } = await buildAppUser(data.user);
+        onAuthSuccess(appUser, appClassroom, 'Password updated successfully! Welcome back.');
+        onClose();
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to update password.');
     } finally {
       setLoading(false);
     }
@@ -251,7 +446,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             title="Back to previous screen"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span>Back to Previous Screen</span>
+            <span>Back</span>
           </button>
         </div>
 
@@ -263,7 +458,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <h1 className="text-lg sm:text-xl font-black text-[#1b1c1c] tracking-tight">
               Academic Sanctuary
             </h1>
-            <p className="text-xs text-[#737874] font-medium">Classroom Cohort Access Portal</p>
+            <p className="text-xs text-[#737874] font-medium">Supabase Authentication Portal</p>
           </div>
         </div>
 
@@ -278,233 +473,181 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       </header>
 
       {/* Main Full-Page Content Area */}
-      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-10 py-8 md:py-12 flex-grow flex flex-col gap-8">
-        {/* Large Visible Tab Switcher */}
-        <div className="grid grid-cols-2 p-1.5 bg-[#EAE8E7] rounded-2xl text-base sm:text-lg font-bold shadow-xs">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setErrorMessage(null);
-            }}
-            className={`py-3.5 sm:py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
-              mode === 'login'
-                ? 'bg-white text-[#1b1c1c] shadow-sm font-extrabold ring-1 ring-black/5'
-                : 'text-[#56615a] hover:text-[#1b1c1c]'
-            }`}
-          >
-            <LogIn className="w-5 h-5 sm:w-6 sm:h-6" />
-            <span>Sign In</span>
-          </button>
+      <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-8 md:py-12 flex-grow flex flex-col gap-6">
+        {/* Tab Switcher (Only visible for Login / Sign Up modes) */}
+        {(mode === 'login' || mode === 'signup') && (
+          <div className="grid grid-cols-2 p-1.5 bg-[#EAE8E7] rounded-2xl text-base sm:text-lg font-bold shadow-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login');
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`py-3.5 sm:py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                mode === 'login'
+                  ? 'bg-white text-[#1b1c1c] shadow-sm font-extrabold ring-1 ring-black/5'
+                  : 'text-[#56615a] hover:text-[#1b1c1c]'
+              }`}
+            >
+              <LogIn className="w-5 h-5 sm:w-6 sm:h-6" />
+              <span>Sign In</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setMode('signup');
-              setErrorMessage(null);
-            }}
-            className={`py-3.5 sm:py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
-              mode === 'signup'
-                ? 'bg-white text-[#1b1c1c] shadow-sm font-extrabold ring-1 ring-black/5'
-                : 'text-[#56615a] hover:text-[#1b1c1c]'
-            }`}
-          >
-            <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
-            <span>Create Account</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signup');
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`py-3.5 sm:py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                mode === 'signup'
+                  ? 'bg-white text-[#1b1c1c] shadow-sm font-extrabold ring-1 ring-black/5'
+                  : 'text-[#56615a] hover:text-[#1b1c1c]'
+              }`}
+            >
+              <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
+              <span>Sign Up</span>
+            </button>
+          </div>
+        )}
 
-        {/* Section Title */}
+        {/* Section Header */}
         <div>
-          {mode === 'login' ? (
+          {mode === 'login' && (
             <div>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1b1c1c] tracking-tight mb-2">
-                Sign In with Institutional Account
+                Sign In to Your Account
               </h2>
               <p className="text-base sm:text-lg text-[#56615a]">
-                Enter the official institutional email address and password given by your institution.
+                Enter your email address and password to access your classroom cohort.
               </p>
             </div>
-          ) : (
+          )}
+
+          {mode === 'signup' && (
             <div>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1b1c1c] tracking-tight mb-2">
-                Create Account with Institutional Details
+                Create a New Account
               </h2>
               <p className="text-base sm:text-lg text-[#56615a]">
-                Sign up using your name, registration number, department, institutional mail ID, and your institutional mail password.
+                Fill out the required information below to register your academic profile.
+              </p>
+            </div>
+          )}
+
+          {mode === 'forgot-password' && (
+            <div>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1b1c1c] tracking-tight mb-2">
+                Reset Your Password
+              </h2>
+              <p className="text-base sm:text-lg text-[#56615a]">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+            </div>
+          )}
+
+          {mode === 'reset-password' && (
+            <div>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1b1c1c] tracking-tight mb-2">
+                Set a New Password
+              </h2>
+              <p className="text-base sm:text-lg text-[#56615a]">
+                Create a strong new password for your Academic Sanctuary account.
               </p>
             </div>
           )}
         </div>
 
-        {/* Error Alert */}
+        {/* Alerts & Messages */}
         {errorMessage && (
           <div className="p-4 sm:p-5 bg-[#ffdad6] border-2 border-[#ffb4ab] rounded-2xl text-sm sm:text-base font-bold text-[#ba1a1a] flex items-center gap-3 shadow-xs">
-            <Info className="w-5 h-5 flex-shrink-0" />
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {mode === 'login' ? (
-          <div className="space-y-6">
-            {/* Quick Demo Accounts Selection Box */}
-            <div className="bg-[#f0f4f1] border-2 border-[#b2beb5] rounded-3xl p-4 sm:p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#56615a] text-white flex items-center justify-center font-bold shadow-xs">
-                    <Sparkles className="w-4 h-4 text-[#d6e7a1]" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-[#1b1c1c] leading-tight flex items-center gap-2">
-                      <span>Quick Demo Accounts</span>
-                      <span className="text-[10px] font-bold bg-[#d6e7a1] text-[#3b4618] px-2 py-0.5 rounded-full uppercase">
-                        1-Click Access
-                      </span>
-                    </h3>
-                    <p className="text-xs text-[#56615a]">
-                      Click any demo persona to test all features with preloaded data
-                    </p>
-                  </div>
-                </div>
-                <span className="hidden sm:inline-block text-[11px] font-mono bg-white px-2.5 py-1 rounded-full border border-[#b2beb5] text-[#56615a] font-bold">
-                  Pass: password123
-                </span>
-              </div>
+        {successMessage && (
+          <div className="p-4 sm:p-5 bg-[#d9e6dc] border-2 border-[#b2beb5] rounded-2xl text-sm sm:text-base font-bold text-[#20402b] flex items-center gap-3 shadow-xs">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-[#20402b]" />
+            <span>{successMessage}</span>
+          </div>
+        )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* Account 1: Sarah Jenkins (Super Admin) */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('sarah.j@oxford.edu', 'password123')}
-                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
-                  title="Log in as Sarah Jenkins (Super Admin)"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#d9e6dc] text-[#2d312e] px-2 py-0.5 rounded-full border border-[#b2beb5]/80 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-[#56615a]" />
-                        <span>Super Admin</span>
-                      </span>
-                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
-                        →
-                      </span>
-                    </div>
-                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Sarah Jenkins</div>
-                    <div className="text-[11px] text-[#56615a] font-mono truncate">sarah.j@oxford.edu</div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
-                    <span>Full Admin Access</span>
-                    <span className="text-[#56615a] font-bold">Try →</span>
-                  </div>
-                </button>
-
-                {/* Account 2: Elena Rostova (Student) */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('elena.r@oxford.edu', 'password123')}
-                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
-                  title="Log in as Elena Rostova (Student)"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#d6e7a1]/60 text-[#404c1a] px-2 py-0.5 rounded-full border border-[#d6e7a1] flex items-center gap-1">
-                        <GraduationCap className="w-3 h-3 text-[#56642b]" />
-                        <span>Student</span>
-                      </span>
-                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
-                        →
-                      </span>
-                    </div>
-                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Elena Rostova</div>
-                    <div className="text-[11px] text-[#56615a] font-mono truncate">elena.r@oxford.edu</div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
-                    <span>Groups & DMs</span>
-                    <span className="text-[#56615a] font-bold">Try →</span>
-                  </div>
-                </button>
-
-                {/* Account 3: Michael Klein (Class Admin) */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('michael.k@oxford.edu', 'password123')}
-                  className="p-3 bg-white hover:bg-[#fafbf9] border-2 border-[#b2beb5]/60 hover:border-[#56615a] rounded-2xl text-left transition-all group shadow-2xs cursor-pointer flex flex-col justify-between"
-                  title="Log in as Michael Klein (Class Admin)"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider bg-[#e0e3e5] text-[#2d312e] px-2 py-0.5 rounded-full border border-[#b2beb5]/80 flex items-center gap-1">
-                        <Award className="w-3 h-3 text-[#56615a]" />
-                        <span>Class Admin</span>
-                      </span>
-                      <span className="text-xs group-hover:translate-x-0.5 transition-transform text-[#56615a] font-bold">
-                        →
-                      </span>
-                    </div>
-                    <div className="font-extrabold text-[#1b1c1c] text-sm truncate">Michael Klein</div>
-                    <div className="text-[11px] text-[#56615a] font-mono truncate">michael.k@oxford.edu</div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-[#737874] flex items-center justify-between border-t border-[#F0EDED] pt-1.5">
-                    <span>Moderator & Notes</span>
-                    <span className="text-[#56615a] font-bold">Try →</span>
-                  </div>
-                </button>
-              </div>
+        {/* Email Verification Sent Screen */}
+        {emailConfirmationSent && (
+          <div className="p-6 sm:p-8 bg-white border-2 border-[#b2beb5] rounded-3xl text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 bg-[#d9e6dc] rounded-full mx-auto flex items-center justify-center text-[#56615a]">
+              <Mail className="w-8 h-8" />
             </div>
-
-            {/* Divider */}
-            <div className="relative flex items-center justify-center">
-              <div className="border-t border-[#D8D6D4] w-full"></div>
-              <span className="bg-white px-3 text-xs text-[#737874] font-semibold uppercase tracking-wider absolute">
-                Or Sign In Manually
-              </span>
+            <h3 className="text-xl font-black text-[#1b1c1c]">Verification Email Sent</h3>
+            <p className="text-sm sm:text-base text-[#56615a] max-w-md mx-auto">
+              Please check your inbox at <span className="font-bold text-[#1b1c1c]">{signupEmail}</span> and click the confirmation link to activate your account.
+            </p>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setEmailConfirmationSent(false);
+                  setSuccessMessage(null);
+                }}
+                className="px-6 py-3 bg-[#56615a] text-white font-bold rounded-xl hover:bg-[#434d46] transition-colors cursor-pointer"
+              >
+                Proceed to Sign In
+              </button>
             </div>
+          </div>
+        )}
 
-            {/* Sign In Form with Institutional Mail & Password */}
-            <form onSubmit={handleLoginSubmit} className="space-y-6">
+        {/* A. LOGIN FORM */}
+        {mode === 'login' && !emailConfirmationSent && (
+          <form onSubmit={handleLoginSubmit} className="space-y-6">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                  Institutional Mail ID
-                </label>
-                <span className="text-xs text-[#56615a] font-bold bg-[#d9e6dc] px-2.5 py-0.5 rounded-full">
-                  Given by Institution
-                </span>
-              </div>
+              <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                Email Address <span className="text-[#ba1a1a]">*</span>
+              </label>
               <div className="relative">
                 <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
                   required
-                  placeholder="e.g. name@institution.edu"
+                  placeholder="name@institution.edu"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a] focus:ring-2 focus:ring-[#56615a]/20"
+                  className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a] focus:ring-2 focus:ring-[#56615a]/20"
                 />
               </div>
-              <p className="text-xs sm:text-sm text-[#737874] mt-1.5">
-                Log in using the official email address issued by your college or university.
-              </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                  Institutional Mail Password
+                  Password <span className="text-[#ba1a1a]">*</span>
                 </label>
-                <span className="text-xs text-[#56615a] font-bold bg-[#d9e6dc] px-2.5 py-0.5 rounded-full">
-                  From Institution
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('forgot-password');
+                    setResetEmail(loginEmail);
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-xs sm:text-sm font-bold text-[#56615a] hover:underline cursor-pointer"
+                >
+                  Forgot password?
+                </button>
               </div>
               <div className="relative">
                 <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Enter your institutional mail password..."
+                  placeholder="Enter your password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="paper-input w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a] focus:ring-2 focus:ring-[#56615a]/20"
+                  className="w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a] focus:ring-2 focus:ring-[#56615a]/20"
                 />
                 <button
                   type="button"
@@ -514,20 +657,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              <p className="text-xs sm:text-sm text-[#737874] mt-1.5 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-[#56615a] flex-shrink-0" />
-                <span>Enter the official mail password provided by your institution.</span>
-              </p>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full py-4.5 sm:py-5 bg-[#56615a] hover:bg-[#3e4641] disabled:opacity-50 text-white font-extrabold text-base sm:text-xl rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer"
               >
-                <LogIn className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span>{loading ? 'Authenticating Profile...' : 'Sign In with Institutional Account'}</span>
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span>Sign In</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -539,29 +687,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onClick={() => {
                     setMode('signup');
                     setErrorMessage(null);
+                    setSuccessMessage(null);
                   }}
                   className="font-bold text-[#56615a] hover:underline cursor-pointer ml-1"
                 >
-                  Create Account with Institutional Details →
+                  Create an account →
                 </button>
               </p>
             </div>
           </form>
-        </div>
-      ) : (
-          /* Sign Up Form with Name, Reg No, Department, Institutional Mail ID, and Password */
-          <form onSubmit={handleSignupSubmit} className="space-y-6">
-            <div className="bg-[#f7faf8] border-2 border-[#b2beb5] rounded-2xl p-4 flex items-start gap-3">
-              <School className="w-5 h-5 text-[#56615a] flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-extrabold text-[#1b1c1c]">Official Institution Registration</h4>
-                <p className="text-xs text-[#56615a] leading-relaxed">
-                  Please provide your official Name, Registration Number (Reg No), Department, Institutional Mail ID, and your <strong>Institutional Mail Password</strong> (the official password provided by your institution for your mail) to create your verified classroom profile.
-                </p>
-              </div>
-            </div>
+        )}
 
-            {/* 1. Full Name & 2. Reg No */}
+        {/* B. SIGN UP FORM (6 REQUIRED FIELDS) */}
+        {mode === 'signup' && !emailConfirmationSent && (
+          <form onSubmit={handleSignupSubmit} className="space-y-6">
+            {/* 1. Full Name & 2. Email */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
@@ -572,118 +712,86 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Elena Rostova"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                    placeholder="e.g. Alex Johnson"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                    Registration Number (Reg No) <span className="text-[#ba1a1a]">*</span>
-                  </label>
-                </div>
-                <div className="relative">
-                  <Award className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. CS22B029 or 2024CS104"
-                    value={signupRegNo}
-                    onChange={(e) => setSignupRegNo(e.target.value.toUpperCase())}
-                    className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg font-mono font-bold rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] shadow-xs focus:outline-none focus:border-[#56615a]"
-                  />
-                </div>
-                <span className="text-xs text-[#737874] mt-1 block">Roll No or Reg ID assigned by institution</span>
-              </div>
-            </div>
-
-            {/* 3. Department */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                  Department <span className="text-[#ba1a1a]">*</span>
+                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                  Email Address <span className="text-[#ba1a1a]">*</span>
                 </label>
-                <span className="text-xs text-[#737874]">Select quick suggestion or type custom</span>
-              </div>
-              <div className="relative mb-2.5">
-                <School className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Department of Computer Science & Engineering"
-                  value={signupDepartment}
-                  onChange={(e) => setSignupDepartment(e.target.value)}
-                  className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
-                />
-              </div>
-              {/* Department quick chips */}
-              <div className="flex flex-wrap gap-1.5">
-                {popularDepartments.map((dept) => (
-                  <button
-                    key={dept}
-                    type="button"
-                    onClick={() => setSignupDepartment(dept)}
-                    className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                      signupDepartment === dept
-                        ? 'bg-[#56615a] text-white border-[#56615a] font-bold'
-                        : 'bg-white text-[#56615a] border-[#D8D6D4] hover:bg-[#F0EDED]'
-                    }`}
-                  >
-                    {dept}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 4. Institutional Mail ID & 5. Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                    Institutional Mail ID <span className="text-[#ba1a1a]">*</span>
-                  </label>
-                  {isInstitutionalDomain(signupEmail) && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#3e5f48] bg-[#d9e6dc] px-2 py-0.5 rounded-full">
-                      <Check className="w-3 h-3" /> Institutional Mail
-                    </span>
-                  )}
-                </div>
                 <div className="relative">
                   <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     required
-                    placeholder="e.g. student@institution.edu"
+                    placeholder="e.g. alex@university.edu"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
-                    className="paper-input w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                    className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
                   />
                 </div>
-                <span className="text-xs text-[#737874] mt-1 block">Official email address issued by institution</span>
+              </div>
+            </div>
+
+            {/* 3. Class Code & 4. Registration Number */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                  Class Code <span className="text-[#ba1a1a]">*</span>
+                </label>
+                <div className="relative">
+                  <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. BTECH26A"
+                    value={classCode}
+                    onChange={(e) => setClassCode(e.target.value.toUpperCase())}
+                    className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg font-mono font-bold uppercase rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] shadow-xs focus:outline-none focus:border-[#56615a]"
+                  />
+                </div>
+                <span className="text-xs text-[#737874] mt-1 block">Classroom cohort code to join</span>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block">
-                    Institutional Mail Password <span className="text-[#ba1a1a]">*</span>
-                  </label>
-                  <span className="text-xs text-[#56615a] font-bold bg-[#d9e6dc] px-2.5 py-0.5 rounded-full">
-                    From Institution
-                  </span>
+                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                  Registration Number <span className="text-[#ba1a1a]">*</span>
+                </label>
+                <div className="relative">
+                  <Award className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 2024CS104"
+                    value={registrationNumber}
+                    onChange={(e) => setRegistrationNumber(e.target.value.toUpperCase())}
+                    className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg font-mono font-bold uppercase rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] shadow-xs focus:outline-none focus:border-[#56615a]"
+                  />
                 </div>
+                <span className="text-xs text-[#737874] mt-1 block">Unique student or roll number</span>
+              </div>
+            </div>
+
+            {/* 5. Password & 6. Confirm Password */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                  Password <span className="text-[#ba1a1a]">*</span>
+                </label>
                 <div className="relative">
                   <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="Enter password given for your mail..."
+                    placeholder="Min 8 characters"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    className="paper-input w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                    className="w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
                   />
                   <button
                     type="button"
@@ -693,160 +801,224 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                <span className="text-xs text-[#56615a] font-medium mt-1 block flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-[#56615a] flex-shrink-0" />
-                  Enter the mail password provided by your institution
-                </span>
-              </div>
-            </div>
-
-            {/* Strict 1-Classroom Assignment Section */}
-            <div className="p-5 sm:p-7 bg-[#d9e6dc]/30 border-2 border-[#b2beb5] rounded-3xl space-y-4 shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <GraduationCap className="w-6 h-6 text-[#56615a]" />
-                <span className="text-base sm:text-lg font-extrabold text-[#1b1c1c] uppercase tracking-wide">
-                  Single Classroom Cohort Assignment
-                </span>
-              </div>
-              <p className="text-sm sm:text-base text-[#434844] leading-relaxed">
-                In Academic Sanctuary, every student belongs to <strong>one specific classroom cohort</strong> for organized notes, syllabus, announcements, and exam schedules.
-              </p>
-
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <button
-                  type="button"
-                  onClick={() => setEnrollmentMode('code')}
-                  className={`py-3.5 sm:py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-bold transition-all cursor-pointer ${
-                    enrollmentMode === 'code'
-                      ? 'bg-white border-[#56615a] text-[#1b1c1c] shadow-sm ring-2 ring-[#56615a]/20'
-                      : 'bg-white/60 border-[#E5E4E2] text-[#737874] hover:bg-white'
-                  }`}
-                >
-                  Enter Code
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEnrollmentMode('select')}
-                  className={`py-3.5 sm:py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-bold transition-all cursor-pointer ${
-                    enrollmentMode === 'select'
-                      ? 'bg-white border-[#56615a] text-[#1b1c1c] shadow-sm ring-2 ring-[#56615a]/20'
-                      : 'bg-white/60 border-[#E5E4E2] text-[#737874] hover:bg-white'
-                  }`}
-                >
-                  Select Cohort
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEnrollmentMode('create')}
-                  className={`py-3.5 sm:py-4 px-2 rounded-2xl border-2 text-sm sm:text-base font-bold transition-all cursor-pointer ${
-                    enrollmentMode === 'create'
-                      ? 'bg-white border-[#56615a] text-[#1b1c1c] shadow-sm ring-2 ring-[#56615a]/20'
-                      : 'bg-white/60 border-[#E5E4E2] text-[#737874] hover:bg-white'
-                  }`}
-                >
-                  Create New
-                </button>
               </div>
 
-              {enrollmentMode === 'code' && (
-                <div className="space-y-2 pt-2">
-                  <label className="text-sm sm:text-base font-bold text-[#434844] block">
-                    Classroom Access Code
-                  </label>
+              <div>
+                <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                  Confirm Password <span className="text-[#ba1a1a]">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
                   <input
-                    type="text"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     required
-                    placeholder="ENTER CODE"
-                    value={classroomCode}
-                    onChange={(e) => setClassroomCode(e.target.value.toUpperCase())}
-                    className="paper-input w-full p-4 text-base sm:text-lg font-mono font-extrabold tracking-widest text-[#1b1c1c] uppercase rounded-2xl bg-white border-2 border-[#D8D6D4] shadow-xs"
+                    placeholder="Re-enter password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
                   />
-                  <span className="text-xs sm:text-sm text-[#737874] block">
-                    Enter the unique access code provided by your cohort administrator.
-                  </span>
-                </div>
-              )}
-
-              {enrollmentMode === 'select' && (
-                <div className="space-y-2 pt-2">
-                  <label className="text-sm sm:text-base font-bold text-[#434844] block">
-                    Choose Your Cohort
-                  </label>
-                  <select
-                    value={selectedClassroomId}
-                    onChange={(e) => setSelectedClassroomId(e.target.value)}
-                    className="w-full p-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-bold shadow-xs cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#737874] hover:text-[#1b1c1c] p-1 cursor-pointer"
                   >
-                    {classrooms.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.collegeName}) • Code: {c.code}
-                      </option>
-                    ))}
-                  </select>
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
-              )}
-
-              {enrollmentMode === 'create' && (
-                <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-[#434844] block mb-1">
-                        Program / Course
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. B.Tech Computer Science"
-                        value={newCourseName}
-                        onChange={(e) => setNewCourseName(e.target.value)}
-                        className="paper-input w-full p-3.5 text-sm sm:text-base rounded-2xl bg-white border-2 border-[#D8D6D4]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-[#434844] block mb-1">
-                        University / College
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. University Name"
-                        value={newCollegeName}
-                        onChange={(e) => setNewCollegeName(e.target.value)}
-                        className="paper-input w-full p-3.5 text-sm sm:text-base rounded-2xl bg-white border-2 border-[#D8D6D4]"
-                      />
-                    </div>
-                  </div>
-                  <div className="text-xs sm:text-sm text-[#56642b] font-bold flex items-center gap-1.5 bg-white/80 p-3 rounded-xl border border-[#b2beb5]">
-                    <ShieldCheck className="w-4 h-4 text-[#56642b] flex-shrink-0" />
-                    <span>You will be registered as the Super Admin for this new cohort.</span>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
-            <div className="pt-4">
+            {/* Password Strength Checklist */}
+            {signupPassword && (
+              <div className="p-4 bg-[#f8faf8] border-2 border-[#E5E4E2] rounded-2xl space-y-2">
+                <div className="text-xs font-bold text-[#56615a] uppercase tracking-wider">
+                  Password Strength Requirements:
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className={`flex items-center gap-1.5 ${passwordStrength.hasMinLength ? 'text-[#20402b] font-bold' : 'text-[#737874]'}`}>
+                    <Check className={`w-3.5 h-3.5 ${passwordStrength.hasMinLength ? 'text-[#20402b]' : 'opacity-40'}`} />
+                    <span>8+ characters</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordStrength.hasUppercase ? 'text-[#20402b] font-bold' : 'text-[#737874]'}`}>
+                    <Check className={`w-3.5 h-3.5 ${passwordStrength.hasUppercase ? 'text-[#20402b]' : 'opacity-40'}`} />
+                    <span>1 uppercase letter (A-Z)</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordStrength.hasLowercase ? 'text-[#20402b] font-bold' : 'text-[#737874]'}`}>
+                    <Check className={`w-3.5 h-3.5 ${passwordStrength.hasLowercase ? 'text-[#20402b]' : 'opacity-40'}`} />
+                    <span>1 lowercase letter (a-z)</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordStrength.hasNumber || passwordStrength.hasSpecial ? 'text-[#20402b] font-bold' : 'text-[#737874]'}`}>
+                    <Check className={`w-3.5 h-3.5 ${passwordStrength.hasNumber || passwordStrength.hasSpecial ? 'text-[#20402b]' : 'opacity-40'}`} />
+                    <span>Number or symbol</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full py-4.5 sm:py-5 bg-[#56615a] hover:bg-[#3e4641] disabled:opacity-50 text-white font-extrabold text-base sm:text-xl rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer"
               >
-                <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span>{loading ? 'Creating Profile...' : 'Complete Registration & Join Cohort'}</span>
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Creating account...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span>Create Account</span>
+                  </>
+                )}
               </button>
             </div>
 
             <div className="text-center pt-2">
               <p className="text-sm sm:text-base text-[#737874]">
-                Already have an account?{' '}
+                Already registered?{' '}
                 <button
                   type="button"
                   onClick={() => {
                     setMode('login');
                     setErrorMessage(null);
+                    setSuccessMessage(null);
                   }}
                   className="font-bold text-[#56615a] hover:underline cursor-pointer ml-1"
                 >
-                  Sign In with Institutional Mail & Password →
+                  Sign in to your account →
                 </button>
               </p>
+            </div>
+          </form>
+        )}
+
+        {/* C. FORGOT PASSWORD FORM */}
+        {mode === 'forgot-password' && (
+          <form onSubmit={handleForgotPasswordSubmit} className="space-y-6">
+            <div>
+              <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                Registered Email Address <span className="text-[#ba1a1a]">*</span>
+              </label>
+              <div className="relative">
+                <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  placeholder="name@institution.edu"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full pl-12 sm:pl-14 pr-4 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4.5 sm:py-5 bg-[#56615a] hover:bg-[#3e4641] disabled:opacity-50 text-white font-extrabold text-base sm:text-xl rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Sending reset link...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span>Send Password Reset Email</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
+                className="font-bold text-[#56615a] hover:underline cursor-pointer"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* D. RESET PASSWORD FORM (SETTING NEW PASSWORD) */}
+        {mode === 'reset-password' && (
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-6">
+            <div>
+              <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                New Password <span className="text-[#ba1a1a]">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Min 8 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#737874] hover:text-[#1b1c1c] p-1 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm sm:text-base font-bold text-[#2d312e] uppercase tracking-wide block mb-2">
+                Confirm New Password <span className="text-[#ba1a1a]">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[#56615a] absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Re-enter new password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  className="w-full pl-12 sm:pl-14 pr-12 py-4 text-base sm:text-lg rounded-2xl bg-white border-2 border-[#D8D6D4] text-[#1b1c1c] font-medium shadow-xs focus:outline-none focus:border-[#56615a]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#737874] hover:text-[#1b1c1c] p-1 cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4.5 sm:py-5 bg-[#56615a] hover:bg-[#3e4641] disabled:opacity-50 text-white font-extrabold text-base sm:text-xl rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Updating password...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span>Set New Password & Sign In</span>
+                  </>
+                )}
+              </button>
             </div>
           </form>
         )}

@@ -124,7 +124,7 @@ let registeredUsers: any[] = [
   },
 ];
 
-let currentUser: any = registeredUsers[0];
+let currentUser: any = null;
 
 let subjects: any[] = [
   {
