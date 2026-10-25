@@ -14,6 +14,7 @@ import { ProfileView } from './components/ProfileView';
 import { UploadMaterialModal } from './components/UploadMaterialModal';
 import { DocumentReaderModal } from './components/DocumentReaderModal';
 import { JoinClassroomModal } from './components/JoinClassroomModal';
+import { CohortChoiceModal } from './components/CohortChoiceModal';
 import { AuthModal } from './components/AuthModal';
 import { ChatView } from './components/chat/ChatView';
 import { supabase } from './lib/supabase';
@@ -55,6 +56,7 @@ export default function App() {
   const [uploadSubjectId, setUploadSubjectId] = useState<string | undefined>(undefined);
   const [uploadExamType, setUploadExamType] = useState<string | undefined>(undefined);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
+  const [showCohortChoiceModal, setShowCohortChoiceModal] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -305,15 +307,42 @@ export default function App() {
     setIsAuthOpen(true);
   };
 
-  const handleAuthSuccess = (user: User, classroom: Classroom, message: string) => {
+  const handleAuthSuccess = (user: User, classroom: Classroom | null, message: string) => {
     setCurrentUser(user);
-    setActiveClassroom(classroom);
-    if (!classrooms.find((c) => c.id === classroom.id)) {
-      setClassrooms([classroom, ...classrooms]);
+    if (classroom) {
+      setActiveClassroom(classroom);
+      if (!classrooms.find((c) => c.id === classroom.id)) {
+        setClassrooms([classroom, ...classrooms]);
+      }
+      loadClassroomData(classroom.id);
+      setShowCohortChoiceModal(false);
+      showToast(message || `Welcome, ${user.name}! Connected to ${classroom.code}`);
+      setCurrentView('dashboard');
+    } else {
+      setActiveClassroom(null);
+      setShowCohortChoiceModal(true);
+      showToast(message || `Welcome, ${user.name}! Choose a cohort option to get started.`);
+      setCurrentView('dashboard');
     }
-    loadClassroomData(classroom.id);
-    showToast(message || `Welcome, ${user.name}! Connected to ${classroom.code}`);
-    setCurrentView('dashboard');
+  };
+
+  const handleQuickDemoLogin = async (email: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'password123' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        confetti({ particleCount: 50, spread: 60 });
+        handleAuthSuccess(data.user, data.classroom, data.message || `Welcome back, ${data.user.name}!`);
+      } else {
+        showToast(data.error || 'Failed to authenticate demo account.');
+      }
+    } catch {
+      showToast('Error connecting to demo authentication server.');
+    }
   };
 
   const handleSignOut = async () => {
@@ -606,6 +635,7 @@ export default function App() {
             onOpenCreateClassroom={() => handleNavigate('create-classroom')}
             onOpenJoinClassroom={() => setIsJoinOpen(true)}
             onOpenAuth={handleOpenAuth}
+            onQuickDemoLogin={handleQuickDemoLogin}
           />
         )}
 
@@ -645,13 +675,13 @@ export default function App() {
                   onClick={() => setIsJoinOpen(true)}
                   className="px-6 py-3 bg-[#56615a] hover:bg-[#434d46] text-white font-bold text-sm rounded-xl transition-all shadow-sm cursor-pointer"
                 >
-                  Join Classroom
+                  Join a Cohort
                 </button>
                 <button
                   onClick={() => handleNavigate('create-classroom')}
                   className="px-6 py-3 bg-white border border-[#E5E4E2] text-[#1b1c1c] font-bold text-sm rounded-xl hover:bg-[#F0EDED] transition-all cursor-pointer"
                 >
-                  Create Classroom
+                  Create a Cohort
                 </button>
               </div>
             </div>
@@ -886,6 +916,20 @@ export default function App() {
         isOpen={isJoinOpen}
         onClose={() => setIsJoinOpen(false)}
         onJoin={handleJoinClassroom}
+      />
+
+      <CohortChoiceModal
+        isOpen={showCohortChoiceModal}
+        onClose={() => setShowCohortChoiceModal(false)}
+        onCreateCohort={() => {
+          setShowCohortChoiceModal(false);
+          handleNavigate('create-classroom');
+        }}
+        onJoinCohort={() => {
+          setShowCohortChoiceModal(false);
+          setIsJoinOpen(true);
+        }}
+        userName={currentUser?.name}
       />
     </div>
   );

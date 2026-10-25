@@ -566,7 +566,7 @@ app.get('/api/auth/me', (req, res) => {
   if (!currentUser) {
     return res.json({ authenticated: false, user: null, classroom: null });
   }
-  const userClassroom = classrooms.find((c) => c.id === currentUser.classroomId) || classrooms[0] || null;
+  const userClassroom = currentUser.classroomId ? (classrooms.find((c) => c.id === currentUser.classroomId) || null) : null;
   res.json({
     authenticated: true,
     user: currentUser,
@@ -606,7 +606,6 @@ app.post('/api/auth/login', (req, res) => {
     }
   } else {
     // If student has an institution-provided credential not yet in memory, authenticate and register
-    const defaultCls = classrooms[0];
     const newId = `user-${Date.now()}`;
     const nameFromEmail = cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
     
@@ -617,35 +616,21 @@ app.post('/api/auth/login', (req, res) => {
       password: cleanPassword,
       avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCGaR09JxPLMxTUqAOn21XHcUqnAmqIeBD6jAqrDU96ITXbLPrkZZaOCjQK7IIR0PKxWNWRRHW7UpC6dTEYhaUWD4iA8mgfmc13xgb933NjQg-Kp__Lo1419atLEixTCMlfpxIvT1-8pb6FjhhmuDcoj3YBiMdoQrxSHJdiO59ij_2u55zAV4duQwWVxUctNVbs3budTAzNTx5QK-4QBTQeVbxrdva2Bi57wirGxl-DIZIC8wyz5e_v2A',
       role: 'student',
-      department: defaultCls ? defaultCls.department : 'General Academic',
+      department: 'General Academic',
       rollNumber: `STU${Math.floor(1000 + Math.random() * 9000)}`,
-      classroomId: defaultCls ? defaultCls.id : '',
+      classroomId: null,
     };
     registeredUsers.push(foundUser);
-    
-    // Add to members
-    members.push({
-      id: foundUser.id,
-      name: foundUser.name,
-      email: foundUser.email,
-      avatar: foundUser.avatar,
-      role: foundUser.role as any,
-      rollNumber: foundUser.rollNumber,
-      joinedDate: 'Just now',
-    });
-    if (defaultCls) {
-      defaultCls.memberCount += 1;
-    }
   }
 
   currentUser = foundUser;
-  const userClassroom = classrooms.find((c) => c.id === foundUser.classroomId) || classrooms[0] || null;
+  const userClassroom = foundUser.classroomId ? (classrooms.find((c) => c.id === foundUser.classroomId) || null) : null;
 
   res.json({
     success: true,
     user: foundUser,
     classroom: userClassroom,
-    message: `Welcome back, ${foundUser.name}! Logged in with ${foundUser.email}`,
+    message: `Welcome back, ${foundUser.name}!`,
   });
 });
 
@@ -690,7 +675,7 @@ app.post('/api/auth/signup', (req, res) => {
   }
 
   const userId = `user-${Date.now()}`;
-  let assignedClassroom = classrooms[0];
+  let assignedClassroom: any = null;
   let finalRole = role;
 
   // Resolve single classroom assignment
@@ -785,27 +770,31 @@ app.post('/api/auth/signup', (req, res) => {
     role: finalRole as any,
     department: department.trim(),
     rollNumber: resolvedRegNo,
-    classroomId: assignedClassroom.id,
+    classroomId: assignedClassroom ? assignedClassroom.id : null,
   };
 
   registeredUsers.push(newUser);
   currentUser = newUser;
 
-  members.push({
-    id: newUser.id,
-    name: newUser.name,
-    email: newUser.email,
-    avatar: newUser.avatar,
-    role: newUser.role,
-    rollNumber: newUser.rollNumber,
-    joinedDate: 'Just now',
-  });
+  if (assignedClassroom) {
+    members.push({
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      avatar: newUser.avatar,
+      role: newUser.role,
+      rollNumber: newUser.rollNumber,
+      joinedDate: 'Just now',
+    });
+  }
 
   res.status(201).json({
     success: true,
     user: newUser,
     classroom: assignedClassroom,
-    message: `Account created! Enrolled in ${assignedClassroom.name}`,
+    message: assignedClassroom
+      ? `Account created! Enrolled in ${assignedClassroom.name}`
+      : `Account created successfully! Welcome to Academic Sanctuary.`,
   });
 });
 
@@ -825,6 +814,90 @@ app.post('/api/auth/switch-user', (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   // Switch to guest/default or keep user for landing
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// Password Reset OTP In-Memory Store
+interface OtpRecord {
+  code: string;
+  expiresAt: number;
+}
+const otpStore = new Map<string, OtpRecord>();
+
+// Request OTP for password reset
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Please enter your registered email address.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const foundUser = registeredUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (!foundUser) {
+    return res.status(404).json({ error: 'No account found with this email address. Please check spelling or register an account.' });
+  }
+
+  // Generate 6-digit random OTP
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  otpStore.set(cleanEmail, { code: otpCode, expiresAt });
+
+  console.log(`[Auth Service] Password reset OTP generated for ${cleanEmail}: ${otpCode}`);
+
+  res.json({
+    success: true,
+    message: `A 6-digit verification OTP has been sent to ${cleanEmail}.`,
+    email: cleanEmail,
+    otp: otpCode, // Provided for instant demo testing and verification
+  });
+});
+
+// Verify OTP & Reset Password
+app.post('/api/auth/verify-reset-otp', (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Email address is required.' });
+  }
+  if (!otp || !otp.trim()) {
+    return res.status(400).json({ error: 'Please enter the 6-digit OTP code.' });
+  }
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanOtp = otp.trim();
+  const record = otpStore.get(cleanEmail);
+
+  if (!record) {
+    return res.status(400).json({ error: 'No OTP request found for this email. Please request a new code.' });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(cleanEmail);
+    return res.status(400).json({ error: 'The OTP code has expired. Please request a new one.' });
+  }
+
+  if (record.code !== cleanOtp) {
+    return res.status(400).json({ error: 'Invalid OTP code. Please enter the correct 6-digit code.' });
+  }
+
+  // OTP verified! Update user password
+  const foundUser = registeredUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (!foundUser) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  foundUser.password = newPassword.trim();
+  otpStore.delete(cleanEmail);
+
+  console.log(`[Auth Service] Password successfully reset for ${cleanEmail}`);
+
+  res.json({
+    success: true,
+    message: 'Password successfully updated! You can now log in with your new password.',
+  });
 });
 
 // Classrooms
